@@ -14,7 +14,7 @@ public class Page {
 
 
     @NotNull
-    private Site site;
+    private int siteId;
 
     @Column(columnDefinition = "TEXT")
     @NotNull
