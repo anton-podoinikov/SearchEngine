@@ -1,24 +1,29 @@
 package searchengine.model;
 
-import com.sun.istack.NotNull;r;
+import com.sun.istack.NotNull;
+import lombok.Getter;
+import lombok.Setter;
 
 import javax.persistence.*;
 import java.util.Date;
+import java.util.List;
 
+@Table(name = "site")
 @Entity
-public class Site {
+@Getter
+@Setter
+public class SiteTable {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     @NotNull
     private int id;
 
-    @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED') NOT NULL")
+    @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Enumerated(EnumType.STRING)
     @NotNull
     private Status status;
 
-    @Column(columnDefinition = "DATETIME")
     @NotNull
     private Date statusTime;
 
@@ -32,4 +37,7 @@ public class Site {
     @Column(columnDefinition = "VARCHAR(255)")
     @NotNull
     private String name;
+
+    @OneToMany(mappedBy = "siteId", fetch = FetchType.EAGER)
+    private List<PageTable> pages;
 }
