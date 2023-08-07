@@ -1,41 +1,35 @@
 package searchengine.model;
 
-import com.sun.istack.NotNull;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import javax.persistence.*;
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 
-@Table(name = "site")
 @Entity
-@Getter
-@Setter
+@Table(name = "site")
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class SiteTable {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
-    @NotNull
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
     @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Enumerated(EnumType.STRING)
-    @NotNull
     private Status status;
 
-    @NotNull
-    private Date statusTime;
+    private LocalDateTime statusTime;
 
     @Column(columnDefinition = "TEXT")
     private String lastError;
 
     @Column(columnDefinition = "VARCHAR(255)")
-    @NotNull
     private String url;
 
     @Column(columnDefinition = "VARCHAR(255)")
-    @NotNull
     private String name;
 
     @OneToMany(mappedBy = "siteId", fetch = FetchType.EAGER)
