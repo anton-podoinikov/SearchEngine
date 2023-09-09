@@ -16,5 +16,21 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://playback.ru/
-      name: playback.ru
+#    - url: https://sochi.ru/
+#      name: sochi
+#    - url: https://krasnodar.ru/
+#      name: krasnodar
+#    - url: https://novo-sibirsk.ru/
+#      name: novosibirsk
+#    - url: https://www.playback.ru/
+#      name: playback
+#    - url: https://skillbox.ru/
+#      name: skillbox
+#    - url: https://corian-yug.ru/
+#      name: corian-yug
+#    - url: https://ipfran.ru/
+#      name: ipfran
+#      - url: https://volochek.life/
+#        name: volochek
+      - url: https://nopaper.ru
+        name: nopaper

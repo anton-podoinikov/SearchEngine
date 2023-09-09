@@ -2,8 +2,9 @@ package searchengine.services;
 
 import searchengine.dto.indexing.IndexingResponse;
 
-import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 public interface IndexingService {
-    IndexingResponse startIndexing();
+    CompletableFuture<IndexingResponse> startIndexing();
+    IndexingResponse stopIndexing();
 }

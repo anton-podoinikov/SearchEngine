@@ -10,7 +10,8 @@ import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingService;
 import searchengine.services.StatisticsService;
 
-import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+
 
 @RestController
 @RequestMapping("/api")
@@ -19,7 +20,7 @@ public class ApiController {
 
     private final StatisticsService statisticsService;
 
-    private final IndexingService indexingResponse;
+    private final IndexingService indexingService;
 
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
@@ -27,8 +28,8 @@ public class ApiController {
     }
 
     @GetMapping("/startIndexing")
-    public ResponseEntity<IndexingResponse> startIndexing() throws Exception {
-        return ResponseEntity.ok(indexingResponse.startIndexing());
+    public ResponseEntity<CompletableFuture<IndexingResponse>> startIndexing() {
+        return ResponseEntity.ok(indexingService.startIndexing());
     }
 
     @GetMapping("/stopIndexing")
