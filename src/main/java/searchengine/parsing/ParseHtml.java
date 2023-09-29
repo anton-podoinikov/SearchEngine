@@ -5,7 +5,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import searchengine.entity.Link;
+import searchengine.dto.indexing.Link;
 import searchengine.model.PageTable;
 import searchengine.model.SiteTable;
 import searchengine.model.Status;
@@ -51,7 +51,7 @@ public class ParseHtml extends RecursiveAction {
                 PageTable pageTable = new PageTable();
 
                 if (linkUrl.startsWith(url)
-//                        && !linkUrl.contains("#")
+                        && !linkUrl.contains("#")
                         && !links.contains(link)
                 ) {
                     sum += 1;

@@ -10,9 +10,6 @@ import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingService;
 import searchengine.services.StatisticsService;
 
-import java.util.concurrent.CompletableFuture;
-
-
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -28,7 +25,7 @@ public class ApiController {
     }
 
     @GetMapping("/startIndexing")
-    public ResponseEntity<CompletableFuture<IndexingResponse>> startIndexing() {
+    public ResponseEntity<IndexingResponse> startIndexing() {
         return ResponseEntity.ok(indexingService.startIndexing());
     }
 

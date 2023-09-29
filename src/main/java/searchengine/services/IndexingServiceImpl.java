@@ -2,9 +2,7 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import searchengine.parsing.ParseHtml;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
@@ -16,7 +14,6 @@ import searchengine.repository.SiteRepository;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
 
 @Service
@@ -29,31 +26,31 @@ public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
 
     @Override
-    @Async
-    @Transactional
-    public CompletableFuture<IndexingResponse> startIndexing() {
-        List<Site> siteList = sites.getSites();
-        try {
+    public IndexingResponse startIndexing() {
+        Thread indexingThread = new Thread(() -> {
+            List<Site> siteList = sites.getSites();
             for (Site site : siteList) {
-                SiteTable siteTable = new SiteTable();
-                siteTable.setUrl(site.getUrl());
-                siteTable.setName(site.getName());
-                siteTable.setStatus(Status.INDEXING);
-                siteTable.setStatusTime(LocalDateTime.now());
-                siteRepository.saveAndFlush(siteTable);
+                try {
+                    SiteTable siteTable = new SiteTable();
+                    siteTable.setUrl(site.getUrl());
+                    siteTable.setName(site.getName());
+                    siteTable.setStatus(Status.INDEXING);
+                    siteTable.setStatusTime(LocalDateTime.now());
+                    siteRepository.saveAndFlush(siteTable);
 
-                ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable);
-                ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
-                        .availableProcessors());
-                pool.invoke(new ParseHtml(site.getUrl(), siteTable));
-                pageRepository.saveAllAndFlush(parseHtml.getPageTable());
+                    ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable);
+                    ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
+                            .availableProcessors());
+                    pool.invoke(new ParseHtml(site.getUrl(), siteTable));
+                    pageRepository.saveAllAndFlush(parseHtml.getPageTable());
+
+                } catch (Exception exception) {
+                    log.error(exception.getMessage());
+                }
             }
-            return CompletableFuture.completedFuture(new IndexingResponse(true));
-        } catch (Exception exception) {
-            log.error(exception.getMessage());
-            return CompletableFuture.completedFuture(new IndexingResponse(false
-                    , "Ошибка индексации: главная страница сайта не доступна"));
-        }
+        });
+        indexingThread.start();
+        return new IndexingResponse(true);
     }
 
     @Override
