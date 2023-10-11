@@ -16,8 +16,10 @@ spring:
 
 indexing-settings:
   sites:
-#    - url: https://sochi.ru/
-#      name: sochi
+#    - url: https://www.tretyakovgallery.ru/
+#      name: tretyakovgallery
+    - url: https://www.svetlovka.ru/
+      name: svetlovka
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/
@@ -30,7 +32,7 @@ indexing-settings:
 #      name: corian-yug
 #    - url: https://ipfran.ru/
 #      name: ipfran
-#      - url: https://volochek.life/
-#        name: volochek
-      - url: https://nopaper.ru
-        name: nopaper
+#    - url: https://volochek.life/
+#      name: volochek
+    - url: https://nopaper.ru
+      name: nopaper

@@ -1,7 +1,9 @@
 package searchengine.parsing;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.Response;
 import org.jsoup.Jsoup;
+import org.jsoup.helper.HttpConnection;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -10,6 +12,7 @@ import searchengine.model.PageTable;
 import searchengine.model.SiteTable;
 import searchengine.model.Status;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.RecursiveAction;
 
@@ -38,7 +41,7 @@ public class ParseHtml extends RecursiveAction {
                             "Chrome/58.0.3029.110 Safari/537.3")
                     .get();
 
-            int statusCode = doc.connection().execute().statusCode();
+            int statusCode = doc.connection().response().statusCode();
 
             Elements linkElements = doc.select("a[href]");
 
@@ -57,6 +60,8 @@ public class ParseHtml extends RecursiveAction {
                     sum += 1;
                     log.info(sum + " - " + link.getLink());
                     links.add(link);
+
+                    siteTable.setStatusTime(LocalDateTime.now());
 
                     pageTable.setPath(link.getLink());
                     pageTable.setContent(element.html());

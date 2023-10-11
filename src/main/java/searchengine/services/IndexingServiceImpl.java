@@ -24,14 +24,14 @@ public class IndexingServiceImpl implements IndexingService {
     private final SitesList sites;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
-
+    private SiteTable siteTable;
     @Override
     public IndexingResponse startIndexing() {
-        Thread indexingThread = new Thread(() -> {
+        new Thread(() -> {
             List<Site> siteList = sites.getSites();
             for (Site site : siteList) {
                 try {
-                    SiteTable siteTable = new SiteTable();
+                    siteTable = new SiteTable();
                     siteTable.setUrl(site.getUrl());
                     siteTable.setName(site.getName());
                     siteTable.setStatus(Status.INDEXING);
@@ -42,14 +42,18 @@ public class IndexingServiceImpl implements IndexingService {
                     ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
                             .availableProcessors());
                     pool.invoke(new ParseHtml(site.getUrl(), siteTable));
+
                     pageRepository.saveAllAndFlush(parseHtml.getPageTable());
+                    siteRepository.saveAndFlush(siteTable);
 
                 } catch (Exception exception) {
                     log.error(exception.getMessage());
+                    siteTable.setStatus(Status.FAILED);
+                    siteTable.setLastError("Ошибка индексации");
+                    siteRepository.saveAndFlush(siteTable);
                 }
             }
-        });
-        indexingThread.start();
+        }).start();
         return new IndexingResponse(true);
     }
 
