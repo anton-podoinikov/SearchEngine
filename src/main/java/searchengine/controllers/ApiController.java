@@ -1,6 +1,9 @@
 package searchengine.controllers;
 
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,11 +16,12 @@ import searchengine.services.StatisticsService;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ApiController {
 
-    private final StatisticsService statisticsService;
+    StatisticsService statisticsService;
 
-    private final IndexingService indexingService;
+    IndexingService indexingService;
 
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
@@ -26,10 +30,25 @@ public class ApiController {
 
     @GetMapping("/startIndexing")
     public ResponseEntity<IndexingResponse> startIndexing() {
-        return ResponseEntity.ok(indexingService.startIndexing());
+        IndexingResponse response = indexingService.startIndexing();
+        if (response.isResult()) {
+            return ResponseEntity.ok(response);
+        } else {
+         return ResponseEntity
+                 .status(HttpStatus.BAD_REQUEST)
+                 .body(new IndexingResponse(false,"Индексация уже запущена"));
+        }
     }
 
     @GetMapping("/stopIndexing")
-    public void stopIndexing(){
+    public ResponseEntity<IndexingResponse> stopIndexing(){
+        IndexingResponse response = indexingService.stopIndexing();
+        if (response.isResult()) {
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(new IndexingResponse(false,"Индексация не запущена"));
+        }
     }
 }

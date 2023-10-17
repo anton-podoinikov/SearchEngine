@@ -1,6 +1,7 @@
 package searchengine.model;
 
 import lombok.*;
+import lombok.experimental.FieldDefaults;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
@@ -11,27 +12,30 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class SiteTable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    int id;
 
     @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Enumerated(EnumType.STRING)
-    private Status status;
+    Status status;
 
-    private LocalDateTime statusTime;
+    LocalDateTime statusTime;
 
     @Column(columnDefinition = "TEXT")
-    private String lastError;
+    String lastError;
 
     @Column(columnDefinition = "VARCHAR(255)")
-    private String url;
+    String url;
 
     @Column(columnDefinition = "VARCHAR(255)")
-    private String name;
+    String name;
 
     @OneToMany(mappedBy = "siteId", fetch = FetchType.EAGER)
-    private List<PageTable> pages;
+    List<PageTable> pages;
+
+
 }

@@ -1,9 +1,12 @@
 package searchengine.dto.statistics;
 
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.experimental.FieldDefaults;
 
 @Data
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class StatisticsResponse {
-    private boolean result;
-    private StatisticsData statistics;
+    boolean result;
+    StatisticsData statistics;
 }

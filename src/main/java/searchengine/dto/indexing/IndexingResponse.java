@@ -1,11 +1,14 @@
 package searchengine.dto.indexing;
 
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.experimental.FieldDefaults;
 
 @Data
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class IndexingResponse {
-    private boolean result;
-    private String error;
+    boolean result;
+    String error;
 
     public IndexingResponse(boolean result) {
         this.result = result;

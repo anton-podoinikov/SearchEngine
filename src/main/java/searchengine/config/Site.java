@@ -1,9 +1,12 @@
 package searchengine.config;
 
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.experimental.FieldDefaults;
 
 @Data
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class Site {
-    private String url;
-    private String name;
+    String url;
+    String name;
 }
