@@ -1,7 +1,5 @@
 package searchengine.parsing;
 
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -20,14 +18,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class ParseHtml extends RecursiveAction {
-    final SiteRepository siteRepository;
-    final SiteTable siteTable;
-    static final Set<PageTable> pageTablesUnique = new HashSet<>();
-    static final Set<Link> links = new HashSet<>();
-    final String url;
-    static int sum = 0;
+    private final SiteRepository siteRepository;
+    private final SiteTable siteTable;
+    private static final Set<PageTable> pageTablesUnique = new HashSet<>();
+    private static final Set<Link> links = new HashSet<>();
+    private final String url;
+    private static int sum = 0;
 
     public ParseHtml(String url, SiteTable siteTable, SiteRepository siteRepository) {
         this.url = url;
@@ -49,13 +46,10 @@ public class ParseHtml extends RecursiveAction {
             int statusCode = doc.connection().response().statusCode();
             Elements linkElements = doc.select("a[href]");
             List<ParseHtml> subtasks = new ArrayList<>();
-
             for (Element element : linkElements) {
                 String linkUrl = element.attr("abs:href");
-
                 Link link = new Link(linkUrl);
                 PageTable pageTable = new PageTable();
-
                 if (linkUrl.startsWith(url)
                         && !isFileLink(url)
                         && !linkUrl.contains("#")
@@ -64,15 +58,12 @@ public class ParseHtml extends RecursiveAction {
                     sum += 1;
                     log.info(sum + " - " + link.getLink());
                     links.add(link);
-
                     pageTable.setPath(link.getLink());
                     pageTable.setContent(element.html());
                     pageTable.setSiteId(siteTable);
                     pageTable.setCode(statusCode);
                     pageTablesUnique.add(pageTable);
-
                     updateStatusTime();
-
                     ParseHtml subtask = new ParseHtml(link.getLink(), siteTable, siteRepository);
                     subtasks.add(subtask);
                 }
@@ -80,10 +71,8 @@ public class ParseHtml extends RecursiveAction {
             invokeAll(subtasks);
         } catch (Exception exception) {
             log.error(exception.getMessage());
-
             siteTable.setStatus(Status.FAILED);
             siteTable.setLastError("Ошибка индексации: " + exception.getMessage());
-
             siteRepository.saveAndFlush(siteTable);
         }
     }
@@ -95,10 +84,8 @@ public class ParseHtml extends RecursiveAction {
 
     public boolean isFileLink(String link) {
         String filePattern = ".*\\.(?i)(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|zip)$";
-
         Pattern pattern = Pattern.compile(filePattern);
         Matcher matcher = pattern.matcher(link);
-
         return matcher.matches();
     }
 

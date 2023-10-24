@@ -1,7 +1,6 @@
 package searchengine.model;
 
 import lombok.*;
-import lombok.experimental.FieldDefaults;
 
 import javax.persistence.*;
 
@@ -10,22 +9,21 @@ import javax.persistence.*;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class PageTable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    int id;
+    private int id;
 
     @ManyToOne(optional = false, cascade = CascadeType.MERGE)
     @JoinColumn(name = "siteId")
-    SiteTable siteId;
+    private SiteTable siteId;
 
     @Column(columnDefinition = "TEXT, INDEX(path(255))")
-    String path;
+    private String path;
 
-    int code;
+    private int code;
 
     @Column(columnDefinition = "MEDIUMTEXT")
-    String content;
+    private String content;
 }

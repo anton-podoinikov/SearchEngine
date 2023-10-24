@@ -1,8 +1,6 @@
 package searchengine.services;
 
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
@@ -17,11 +15,10 @@ import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class StatisticsServiceImpl implements StatisticsService {
 
-    Random random = new Random();
-    SitesList sites;
+    private final Random random = new Random();
+    private final SitesList sites;
 
     @Override
     public StatisticsResponse getStatistics() {

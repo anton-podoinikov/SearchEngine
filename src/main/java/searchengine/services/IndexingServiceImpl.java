@@ -1,8 +1,6 @@
 package searchengine.services;
 
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -17,6 +15,7 @@ import searchengine.model.Status;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -26,28 +25,24 @@ import java.util.concurrent.ForkJoinPool;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class IndexingServiceImpl implements IndexingService {
 
-    SitesList sites;
-    PageRepository pageRepository;
-    SiteRepository siteRepository;
-    ExecutorService executorService = Executors.newFixedThreadPool(1);
-    ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
+    private final SitesList sites;
+    private final PageRepository pageRepository;
+    private final SiteRepository siteRepository;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
+    private final ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
             .availableProcessors());
 
     @Override
     @Transactional
     public IndexingResponse startIndexing() {
         List<Site> siteList = sites.getSites();
-
         for (Site site : siteList) {
-
             SiteTable existingSite = siteRepository.findByUrl(site.getUrl());
             if (existingSite != null) {
                 deleteSiteData(existingSite);
             }
-
             executorService.submit(() -> {
                 SiteTable siteTable = new SiteTable();
                 try {
@@ -56,17 +51,14 @@ public class IndexingServiceImpl implements IndexingService {
                     siteTable.setStatus(Status.INDEXING);
                     siteTable.setStatusTime(LocalDateTime.now());
                     siteRepository.saveAndFlush(siteTable);
-
                     if (!isMainPageAvailable(site.getUrl())) {
                         log.error("Главная страница сайта " + site.getUrl() + " недоступна.");
                         setSiteAsFailed(siteTable);
                         return;
                     }
-
                     ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable, siteRepository);
                     pool.invoke(new ParseHtml(site.getUrl(), siteTable, siteRepository));
                     pageRepository.saveAllAndFlush(parseHtml.getPageTable());
-
                 } catch (Exception exception) {
                     log.error(exception.getMessage());
                     siteTable.setStatus(Status.FAILED);
@@ -76,16 +68,13 @@ public class IndexingServiceImpl implements IndexingService {
                 }
             });
         }
-
         return new IndexingResponse(true);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-
         executorService.shutdownNow();
         pool.shutdownNow();
-
         return new IndexingResponse(true);
     }
 
@@ -98,12 +87,9 @@ public class IndexingServiceImpl implements IndexingService {
                             "AppleWebKit/537.36 (KHTML, like Gecko)" +
                             "Chrome/58.0.3029.110 Safari/537.3")
                     .get();
-
             int statusCode = mainPage.connection().response().statusCode();
-
             return statusCode == 200;
-        } catch (Exception e) {
-
+        } catch (IOException e) {
             return false;
         }
     }
