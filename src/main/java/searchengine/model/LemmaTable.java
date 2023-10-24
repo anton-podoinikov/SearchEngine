@@ -1,16 +1,18 @@
 package searchengine.model;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import javax.persistence.*;
 import java.util.List;
 
 @Entity
-@Table(name = "page")
+@Table(name = "lemma")
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class PageTable {
+public class LemmaTable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -21,15 +23,12 @@ public class PageTable {
     @JoinColumn(name = "siteId", nullable = false)
     private SiteTable siteId;
 
-    @Column(columnDefinition = "TEXT, INDEX(path(255))")
-    private String path;
+    @Column(columnDefinition = "VARCHAR(255)", nullable = false)
+    private String lemma;
 
     @Column(nullable = false)
-    private int code;
+    private int frequency;
 
-    @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
-    private String content;
-
-    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "lemma", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<IndexTable> index;
 }

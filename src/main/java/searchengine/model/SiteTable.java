@@ -14,13 +14,15 @@ import java.util.List;
 public class SiteTable {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(nullable = false)
     private int id;
 
     @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Enumerated(EnumType.STRING)
     private Status status;
 
+    @Column(nullable = false)
     private LocalDateTime statusTime;
 
     @Column(columnDefinition = "TEXT")
@@ -29,9 +31,12 @@ public class SiteTable {
     @Column(columnDefinition = "VARCHAR(255)")
     private String url;
 
-    @Column(columnDefinition = "VARCHAR(255)")
+    @Column(columnDefinition = "VARCHAR(255)", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "siteId", fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY)
     private List<PageTable> pages;
+
+    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY)
+    private List<LemmaTable> lemmas;
 }
