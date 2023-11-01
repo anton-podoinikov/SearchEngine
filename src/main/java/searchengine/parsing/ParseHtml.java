@@ -5,7 +5,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import searchengine.dto.indexing.Link;
 import searchengine.model.PageTable;
 import searchengine.model.SiteTable;
 import searchengine.model.Status;
@@ -24,7 +23,7 @@ public class ParseHtml extends RecursiveAction {
     private static final Set<PageTable> pageTablesUnique = new HashSet<>();
     private static final Set<Link> links = new HashSet<>();
     private final String url;
-    private static int sum = 0;
+    private static int count = 0;
 
     public ParseHtml(String url, SiteTable siteTable, SiteRepository siteRepository) {
         this.url = url;
@@ -55,8 +54,8 @@ public class ParseHtml extends RecursiveAction {
                         && !linkUrl.contains("#")
                         && !links.contains(link)
                 ) {
-                    sum += 1;
-                    log.info(sum + " - " + link.getLink());
+                    count();
+                    log.info(count + " - " + link.getLink());
                     links.add(link);
                     pageTable.setPath(link.getLink());
                     pageTable.setContent(element.html());
@@ -82,7 +81,7 @@ public class ParseHtml extends RecursiveAction {
         return new ArrayList<>(pageTablesUnique);
     }
 
-    public boolean isFileLink(String link) {
+    private boolean isFileLink(String link) {
         String filePattern = ".*\\.(?i)(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|zip)$";
         Pattern pattern = Pattern.compile(filePattern);
         Matcher matcher = pattern.matcher(link);
@@ -92,5 +91,9 @@ public class ParseHtml extends RecursiveAction {
     private void updateStatusTime() {
         siteTable.setStatusTime(LocalDateTime.now());
         siteRepository.saveAndFlush(siteTable);
+    }
+
+    private static void count() {
+        count++;
     }
 }

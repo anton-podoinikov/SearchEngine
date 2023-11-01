@@ -78,6 +78,12 @@ public class IndexingServiceImpl implements IndexingService {
         return new IndexingResponse(true);
     }
 
+    @Override
+    public IndexingResponse indexPage(String url) {
+
+        return new IndexingResponse(true);
+    }
+
     private boolean isMainPageAvailable(String mainPageUrl) {
         try {
             Document mainPage = Jsoup.connect(mainPageUrl)

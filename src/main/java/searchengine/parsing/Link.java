@@ -1,4 +1,4 @@
-package searchengine.dto.indexing;
+package searchengine.parsing;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

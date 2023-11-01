@@ -7,7 +7,7 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,13 +15,12 @@ import java.util.List;
 import java.util.Locale;
 
 @Slf4j
-@Component
+@Service
 public class LemmaFinderImpl implements LemmaFinder {
     private static RussianLuceneMorphology russianLuceneMorphology;
-    private final static String REGEX = "\\p{Punct}|[0-9]|№|©|◄|«|»|—|-|@|…";
-    private final static Marker INVALID_SYMBOL_MARKER = MarkerManager.getMarker("INVALID_SYMBOL");
-    private final static Logger LOGGER = LogManager.getLogger(LuceneMorphology.class);
-
+    private static final String REGEX = "\\p{Punct}|[0-9]|№|©|◄|«|»|—|-|@|…";
+    private static final Marker INVALID_SYMBOL_MARKER = MarkerManager.getMarker("INVALID_SYMBOL");
+    private static final Logger LOGGER = LogManager.getLogger(LuceneMorphology.class);
 
     static {
         try {
