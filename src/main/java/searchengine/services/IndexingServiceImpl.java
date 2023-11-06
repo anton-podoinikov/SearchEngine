@@ -12,8 +12,11 @@ import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteTable;
 import searchengine.model.Status;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
+import searchengine.splitter.LemmaFinderImpl;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -30,44 +33,28 @@ public class IndexingServiceImpl implements IndexingService {
     private final SitesList sites;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
-    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
+    private final LemmaFinderImpl lemmaFinder;
+    private ExecutorService executorService;
     private final ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
             .availableProcessors());
 
     @Override
     @Transactional
     public IndexingResponse startIndexing() {
+        executorService = Executors.newFixedThreadPool(1);
+
         List<Site> siteList = sites.getSites();
+
         for (Site site : siteList) {
             SiteTable existingSite = siteRepository.findByUrl(site.getUrl());
             if (existingSite != null) {
                 deleteSiteData(existingSite);
             }
-            executorService.submit(() -> {
-                SiteTable siteTable = new SiteTable();
-                try {
-                    siteTable.setUrl(site.getUrl());
-                    siteTable.setName(site.getName());
-                    siteTable.setStatus(Status.INDEXING);
-                    siteTable.setStatusTime(LocalDateTime.now());
-                    siteRepository.saveAndFlush(siteTable);
-                    if (!isMainPageAvailable(site.getUrl())) {
-                        log.error("Главная страница сайта " + site.getUrl() + " недоступна.");
-                        setSiteAsFailed(siteTable);
-                        return;
-                    }
-                    ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable, siteRepository);
-                    pool.invoke(new ParseHtml(site.getUrl(), siteTable, siteRepository));
-                    pageRepository.saveAllAndFlush(parseHtml.getPageTable());
-                } catch (Exception exception) {
-                    log.error(exception.getMessage());
-                    siteTable.setStatus(Status.FAILED);
-                    siteTable.setLastError("Ошибка индексации: " + exception.getMessage());
-                } finally {
-                    siteRepository.saveAndFlush(siteTable);
-                }
-            });
+            executorService.submit(() -> indexSite(site));
         }
+
         return new IndexingResponse(true);
     }
 
@@ -79,9 +66,62 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public IndexingResponse indexPage(String url) {
+    public IndexingResponse startIndexingUrl(String url) {
+        if (urlValid(url)) {
 
+        }
         return new IndexingResponse(true);
+    }
+
+    @Transactional
+    public void deleteSiteData(SiteTable siteTable) {
+        pageRepository.deleteBySiteId(siteTable.getId());
+        siteRepository.deleteByUrl(siteTable.getUrl());
+    }
+
+    private boolean urlValid(String url) {
+        List<Site> urlList = sites.getSites();
+        for (Site s : urlList) {
+            if (s.getUrl().equals(url)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void indexSite(Site site) {
+        SiteTable siteTable = new SiteTable();
+        try {
+            siteTable.setUrl(site.getUrl());
+            siteTable.setName(site.getName());
+            siteTable.setStatus(Status.INDEXING);
+            siteTable.setStatusTime(LocalDateTime.now());
+            siteRepository.saveAndFlush(siteTable);
+
+            if (!isMainPageAvailable(site.getUrl())) {
+                handleMainPageUnavailable(site.getUrl(), siteTable);
+                return;
+            }
+
+            ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable, siteRepository, lemmaRepository, indexRepository, lemmaFinder);
+            pool.invoke(new ParseHtml(site.getUrl(), siteTable, siteRepository, lemmaRepository, indexRepository, lemmaFinder));
+            pageRepository.saveAllAndFlush(parseHtml.getPageTable());
+        } catch (Exception exception) {
+            handleIndexingError(exception, siteTable);
+        } finally {
+            siteRepository.saveAndFlush(siteTable);
+        }
+    }
+
+    private void handleMainPageUnavailable(String siteUrl, SiteTable siteTable) {
+        log.error("Главная страница сайта " + siteUrl + " недоступна.");
+        setSiteAsFailed(siteTable);
+    }
+
+    private void handleIndexingError(Exception exception, SiteTable siteTable) {
+        log.error(exception.getMessage());
+        siteTable.setStatus(Status.FAILED);
+        siteTable.setLastError("Ошибка индексации: " + exception.getMessage());
     }
 
     private boolean isMainPageAvailable(String mainPageUrl) {
@@ -103,11 +143,5 @@ public class IndexingServiceImpl implements IndexingService {
     private void setSiteAsFailed(SiteTable siteTable) {
         siteTable.setStatus(Status.FAILED);
         siteTable.setLastError("Главная страница недоступна");
-    }
-
-    @Transactional
-    public void deleteSiteData(SiteTable siteTable) {
-        pageRepository.deleteBySiteId(siteTable.getId());
-        siteRepository.deleteByUrl(siteTable.getUrl());
     }
 }

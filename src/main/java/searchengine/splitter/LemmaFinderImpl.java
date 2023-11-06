@@ -7,7 +7,7 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Locale;
 
 @Slf4j
-@Service
+@Component
 public class LemmaFinderImpl implements LemmaFinder {
     private static RussianLuceneMorphology russianLuceneMorphology;
     private static final String REGEX = "\\p{Punct}|[0-9]|№|©|◄|«|»|—|-|@|…";

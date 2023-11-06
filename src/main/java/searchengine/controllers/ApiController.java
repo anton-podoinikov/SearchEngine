@@ -48,7 +48,7 @@ public class ApiController {
 
     @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
-        IndexingResponse response = indexingService.indexPage(url);
+        IndexingResponse response = indexingService.startIndexingUrl(url);
         if (response.isResult()) {
             return ResponseEntity.ok(response);
         } else {
