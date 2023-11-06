@@ -6,12 +6,11 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import searchengine.model.*;
 import searchengine.parsing.ParseHtml;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
-import searchengine.model.SiteTable;
-import searchengine.model.Status;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
@@ -103,9 +102,51 @@ public class IndexingServiceImpl implements IndexingService {
                 return;
             }
 
-            ParseHtml parseHtml = new ParseHtml(site.getUrl(), siteTable, siteRepository, lemmaRepository, indexRepository, lemmaFinder);
-            pool.invoke(new ParseHtml(site.getUrl(), siteTable, siteRepository, lemmaRepository, indexRepository, lemmaFinder));
-            pageRepository.saveAllAndFlush(parseHtml.getPageTable());
+            ParseHtml parseHtml = new ParseHtml(site.getUrl()
+                    ,siteTable
+                    ,siteRepository
+                    ,lemmaRepository
+                    ,indexRepository
+                    ,lemmaFinder);
+            pool.invoke(new ParseHtml(site.getUrl()
+                    ,siteTable
+                    ,siteRepository
+                    ,lemmaRepository
+                    ,indexRepository
+                    ,lemmaFinder));
+
+            List<PageTable> pageTables = parseHtml.getPageTable();
+            pageRepository.saveAllAndFlush(pageTables);
+
+            for (PageTable pageTable : pageTables) {
+                try {
+                    HashMap<String, Integer> lemma = lemmaFinder.collectLemmas(pageTable.getContent());
+                    for (Map.Entry<String, Integer> entry : lemma.entrySet()) {
+                        String lemmaText = entry.getKey();
+                        int frequency = entry.getValue();
+
+                        LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
+                        if (existingLemma != null) {
+                            existingLemma.setFrequency(existingLemma.getFrequency() + frequency);
+                        } else {
+                            existingLemma = new LemmaTable();
+                            existingLemma.setSiteId(siteTable);
+                            existingLemma.setLemma(lemmaText);
+                            existingLemma.setFrequency(frequency);
+                            lemmaRepository.saveAndFlush(existingLemma);
+                        }
+
+                        IndexTable indexTable = new IndexTable();
+                        indexTable.setLemma(existingLemma);
+                        indexTable.setRank(frequency);
+                        indexTable.setPage(pageTable);
+                        indexRepository.saveAndFlush(indexTable);
+
+                    }
+                } catch (Exception ex) {
+                    log.error("Произошла ошибка при обработке страницы: " + ex.getMessage());
+                }
+            }
         } catch (Exception exception) {
             handleIndexingError(exception, siteTable);
         } finally {

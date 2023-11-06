@@ -30,7 +30,12 @@ public class ParseHtml extends RecursiveAction {
     private final String url;
     private static int count = 0;
 
-    public ParseHtml(String url, SiteTable siteTable, SiteRepository siteRepository, LemmaRepository lemmaRepository, IndexRepository indexRepository, LemmaFinder lemmaFinder) {
+    public ParseHtml(String url
+            ,SiteTable siteTable
+            ,SiteRepository siteRepository
+            ,LemmaRepository lemmaRepository
+            ,IndexRepository indexRepository
+            ,LemmaFinder lemmaFinder) {
         this.url = url;
         this.siteTable = siteTable;
         this.siteRepository = siteRepository;
@@ -55,33 +60,6 @@ public class ParseHtml extends RecursiveAction {
 
             Elements linkElements = doc.select("a[href]");
 
-            HashMap<String, Integer> lemma = lemmaFinder.collectLemmas(doc.html());
-
-            for (Map.Entry<String, Integer> entry : lemma.entrySet()) {
-                String lemmaText = entry.getKey();
-                int frequency = entry.getValue();
-
-                // Попытка найти лемму в базе данных
-                LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
-
-                if (existingLemma != null) {
-                    // Лемма уже существует - увеличиваем частоту
-                    existingLemma.setFrequency(existingLemma.getFrequency() + frequency);
-                } else {
-                    LemmaTable lemmaTable = new LemmaTable();
-                    lemmaTable.setSiteId(siteTable);
-                    lemmaTable.setLemma(lemmaText);
-                    lemmaTable.setFrequency(frequency);
-                    lemmaRepository.saveAndFlush(lemmaTable);
-                }
-
-                IndexTable indexTable = new IndexTable();
-                indexTable.setLemma(existingLemma); // Установите существующую лемму
-                indexTable.setPage(pageTable);   // Установите существующую страницу
-                indexTable.setRank(frequency);      // Установите количество леммы на странице
-                indexRepository.saveAndFlush(indexTable);
-            }
-
             List<ParseHtml> subtasks = new ArrayList<>();
 
             for (Element element : linkElements) {
@@ -104,11 +82,11 @@ public class ParseHtml extends RecursiveAction {
 
                     updateStatusTime();
                     ParseHtml subtask = new ParseHtml(link.getLink()
-                            , siteTable
-                            , siteRepository
-                            , lemmaRepository
-                            , indexRepository
-                            , lemmaFinder);
+                            ,siteTable
+                            ,siteRepository
+                            ,lemmaRepository
+                            ,indexRepository
+                            ,lemmaFinder);
                     subtasks.add(subtask);
                 }
             }
