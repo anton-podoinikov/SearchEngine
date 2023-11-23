@@ -8,6 +8,7 @@ import org.jsoup.select.Elements;
 import searchengine.model.*;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.splitter.LemmaFinder;
 
@@ -23,31 +24,32 @@ public class ParseHtml extends RecursiveAction {
     private final SiteTable siteTable;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
+    private final PageRepository pageRepository;
     private final LemmaFinder lemmaFinder;
     private static final Set<PageTable> pageTablesUnique = new HashSet<>();
-    private static final Set<Link> links = new HashSet<>();
-
+    private static final Set<String> links = new HashSet<>();
     private final String url;
     private static int count = 0;
 
     public ParseHtml(String url
-            ,SiteTable siteTable
-            ,SiteRepository siteRepository
-            ,LemmaRepository lemmaRepository
-            ,IndexRepository indexRepository
-            ,LemmaFinder lemmaFinder) {
+            , SiteTable siteTable
+            , SiteRepository siteRepository
+            , LemmaRepository lemmaRepository
+            , IndexRepository indexRepository
+            , PageRepository pageRepository, LemmaFinder lemmaFinder) {
         this.url = url;
         this.siteTable = siteTable;
         this.siteRepository = siteRepository;
         this.lemmaRepository = lemmaRepository;
         this.indexRepository = indexRepository;
+        this.pageRepository = pageRepository;
         this.lemmaFinder = lemmaFinder;
     }
 
     @Override
     protected void compute() {
         try {
-            Thread.sleep(200);
+            Thread.sleep(300);
             Document doc = Jsoup.connect(url)
                     .ignoreHttpErrors(true)
                     .ignoreContentType(true)
@@ -64,29 +66,34 @@ public class ParseHtml extends RecursiveAction {
 
             for (Element element : linkElements) {
                 String linkUrl = element.attr("abs:href");
-                Link link = new Link(linkUrl);
                 PageTable pageTable = new PageTable();
                 if (linkUrl.startsWith(url)
-                        && !isFileLink(url)
+                        && !isFileLink(linkUrl)
                         && !linkUrl.contains("#")
-                        && !links.contains(link)
+                        && !links.contains(linkUrl)
                 ) {
                     count();
-                    log.info(count + " - " + link.getLink());
-                    links.add(link);
-                    pageTable.setPath(link.getLink());
+                    log.info(count + " - " + linkUrl);
+                    links.add(linkUrl);
+
+                    pageTable.setPath(linkUrl);
                     pageTable.setContent(element.html());
                     pageTable.setSiteId(siteTable);
                     pageTable.setCode(statusCode);
                     pageTablesUnique.add(pageTable);
 
+
+
                     updateStatusTime();
-                    ParseHtml subtask = new ParseHtml(link.getLink()
-                            ,siteTable
-                            ,siteRepository
-                            ,lemmaRepository
-                            ,indexRepository
-                            ,lemmaFinder);
+
+                    ParseHtml subtask = new ParseHtml(linkUrl
+                            , siteTable
+                            , siteRepository
+                            , lemmaRepository
+                            , indexRepository
+                            , pageRepository
+                            , lemmaFinder);
+
                     subtasks.add(subtask);
                 }
             }

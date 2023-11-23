@@ -1,21 +1,26 @@
 package searchengine.controllers;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.dto.search.SearchResponse;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingService;
+import searchengine.services.SearchService;
 import searchengine.services.StatisticsService;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Slf4j
 public class ApiController {
 
     private final StatisticsService statisticsService;
     private final IndexingService indexingService;
+    private final SearchService searchService;
 
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
@@ -56,6 +61,24 @@ public class ApiController {
                     .status(HttpStatus.BAD_REQUEST)
                     .body(new IndexingResponse(false, "Данная страница находится за пределами сайтов, " +
                             "указанных в конфигурационном файле"));
+        }
+    }
+
+    //TODO Написать контроллер поиска.
+    @GetMapping("/search")
+    public ResponseEntity<SearchResponse> search(String query) {
+        if (query.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new SearchResponse(false, "Задан пустой поисковый запрос"));
+        }
+
+        SearchResponse response = searchService.findByLemmaInDatabase(query);
+
+        if (response.isResult()) {
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new SearchResponse(false, "Указанная страница не найдена"));
         }
     }
 }

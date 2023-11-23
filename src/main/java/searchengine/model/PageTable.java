@@ -3,6 +3,7 @@ package searchengine.model;
 import lombok.*;
 
 import javax.persistence.*;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -17,8 +18,8 @@ public class PageTable {
     @Column(nullable = false)
     private int id;
 
-    @ManyToOne(optional = false, cascade = CascadeType.MERGE, fetch = FetchType.LAZY)
-    @JoinColumn(name = "siteId", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "site_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private SiteTable siteId;
 
     @Column(columnDefinition = "TEXT, INDEX(path(255))")
@@ -30,6 +31,6 @@ public class PageTable {
     @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
     private String content;
 
-    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL)
-    private List<IndexTable> index;
+    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<IndexTable> index = new ArrayList<>();
 }

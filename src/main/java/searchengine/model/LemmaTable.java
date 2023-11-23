@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import javax.persistence.*;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -19,8 +20,8 @@ public class LemmaTable {
     @Column(nullable = false)
     private int id;
 
-    @ManyToOne(optional = false, cascade = CascadeType.MERGE, fetch = FetchType.LAZY)
-    @JoinColumn(name = "siteId", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "site_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private SiteTable siteId;
 
     @Column(columnDefinition = "VARCHAR(255)", nullable = false)
@@ -29,6 +30,7 @@ public class LemmaTable {
     @Column(nullable = false)
     private int frequency;
 
-    @OneToMany(mappedBy = "lemma", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<IndexTable> index;
+    @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<IndexTable> index = new ArrayList<>();
+
 }

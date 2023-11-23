@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.*;
 import searchengine.parsing.ParseHtml;
 import searchengine.config.Site;
@@ -17,12 +16,11 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.splitter.LemmaFinderImpl;
 
+import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.*;
 
 @Service
 @RequiredArgsConstructor
@@ -36,121 +34,132 @@ public class IndexingServiceImpl implements IndexingService {
     private final IndexRepository indexRepository;
     private final LemmaFinderImpl lemmaFinder;
     private ExecutorService executorService;
-    private final ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime()
-            .availableProcessors());
+    private ForkJoinPool pool;
 
+
+    //TODO Доработать так что бы после остановки индексации, метод startIndexing смог снова запуститься.
     @Override
-    @Transactional
     public IndexingResponse startIndexing() {
+
         executorService = Executors.newFixedThreadPool(1);
+        pool = new ForkJoinPool(Runtime.getRuntime()
+                .availableProcessors());
 
         List<Site> siteList = sites.getSites();
 
-        for (Site site : siteList) {
-            SiteTable existingSite = siteRepository.findByUrl(site.getUrl());
-            if (existingSite != null) {
-                deleteSiteData(existingSite);
+        try {
+            for (Site site : siteList) {
+
+                if (siteRepository.findByUrl(site.getUrl()) != null) {
+                    deleteSite(siteRepository.findByUrl(site.getUrl()));
+                }
+
+                SiteTable siteTable = new SiteTable();
+                siteTable.setUrl(site.getUrl());
+                siteTable.setName(site.getName());
+                siteTable.setStatus(Status.INDEXING);
+                siteTable.setStatusTime(LocalDateTime.now());
+
+                siteRepository.saveAndFlush(siteTable);
             }
-            executorService.submit(() -> indexSite(site));
+
+            for (SiteTable siteTable : siteRepository.findAll()) {
+                executorService.submit(() -> indexSite(siteTable));
+            }
+
+        } catch (Exception e) {
+            log.error("Произошла ошибка во время индексации: " + e.getMessage());
+            return new IndexingResponse(false);
         }
-
         return new IndexingResponse(true);
     }
 
-    @Override
-    public IndexingResponse stopIndexing() {
-        executorService.shutdownNow();
-        pool.shutdownNow();
-        return new IndexingResponse(true);
-    }
 
+    //TODO Метод не работат должным образом, разобраться почему и решить проблему!!!
     @Override
     public IndexingResponse startIndexingUrl(String url) {
         if (urlValid(url)) {
+            SiteTable existingSite = siteRepository.findByUrl(url);
 
+            if (existingSite == null) {
+                log.error("Сайт с URL " + url + " не найден в базе данных.");
+                return new IndexingResponse(false);
+            }
+
+            Site site = new Site();
+            site.setUrl(url);
+            site.setName(existingSite.getName());
+
+            return new IndexingResponse(true);
+        } else {
+            log.error("Недопустимый URL: " + url);
+            return new IndexingResponse(false);
         }
-        return new IndexingResponse(true);
     }
 
-    @Transactional
-    public void deleteSiteData(SiteTable siteTable) {
-        pageRepository.deleteBySiteId(siteTable.getId());
+
+    //TODO Доработать метод stopIndexing.
+    @Override
+    @PreDestroy
+    public IndexingResponse stopIndexing() {
+        try {
+            executorService.shutdownNow();
+            pool.shutdownNow();
+            boolean executorTerminated = executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            boolean poolTerminated = pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
+            if (executorTerminated && poolTerminated) {
+                log.info("Индексирование успешно остановлено.");
+                return new IndexingResponse(true);
+            } else {
+                log.error("Прекращение индексации не завершилось в течение ожидаемого времени.");
+                return new IndexingResponse(false, "Прекращение индексации не завершилось в течение ожидаемого времени.");
+            }
+        } catch (InterruptedException e) {
+            log.error("Произошла ошибка при остановке индексирования.: " + e.getMessage());
+            return new IndexingResponse(false, "Произошла ошибка при остановке индексирования.: " + e.getMessage());
+        }
+    }
+
+    public void deleteSite(SiteTable siteTable) {
         siteRepository.deleteByUrl(siteTable.getUrl());
     }
 
-    private boolean urlValid(String url) {
-        List<Site> urlList = sites.getSites();
-        for (Site s : urlList) {
-            if (s.getUrl().equals(url)) {
-                return true;
-            }
+
+    //TODO Разделить метод indexSize на более мелкие методы.
+    private void indexSite(SiteTable siteTable) {
+
+        if (!isMainPageAvailable(siteTable.getUrl())) {
+            handleMainPageUnavailable(siteTable.getUrl(), siteTable);
+            return;
         }
-        return false;
-    }
 
-    private void indexSite(Site site) {
-        SiteTable siteTable = new SiteTable();
         try {
-            siteTable.setUrl(site.getUrl());
-            siteTable.setName(site.getName());
-            siteTable.setStatus(Status.INDEXING);
-            siteTable.setStatusTime(LocalDateTime.now());
-            siteRepository.saveAndFlush(siteTable);
+            ParseHtml parseHtml = new ParseHtml(siteTable.getUrl()
+                    , siteTable
+                    , siteRepository
+                    , lemmaRepository
+                    , indexRepository
+                    , pageRepository
+                    , lemmaFinder);
 
-            if (!isMainPageAvailable(site.getUrl())) {
-                handleMainPageUnavailable(site.getUrl(), siteTable);
-                return;
-            }
-
-            ParseHtml parseHtml = new ParseHtml(site.getUrl()
-                    ,siteTable
-                    ,siteRepository
-                    ,lemmaRepository
-                    ,indexRepository
-                    ,lemmaFinder);
-            pool.invoke(new ParseHtml(site.getUrl()
-                    ,siteTable
-                    ,siteRepository
-                    ,lemmaRepository
-                    ,indexRepository
-                    ,lemmaFinder));
+            pool.invoke(new ParseHtml(siteTable.getUrl()
+                    , siteTable
+                    , siteRepository
+                    , lemmaRepository
+                    , indexRepository
+                    , pageRepository
+                    , lemmaFinder));
 
             List<PageTable> pageTables = parseHtml.getPageTable();
-            pageRepository.saveAllAndFlush(pageTables);
 
-            for (PageTable pageTable : pageTables) {
-                try {
-                    HashMap<String, Integer> lemma = lemmaFinder.collectLemmas(pageTable.getContent());
-                    for (Map.Entry<String, Integer> entry : lemma.entrySet()) {
-                        String lemmaText = entry.getKey();
-                        int frequency = entry.getValue();
+            pageRepository.saveAll(pageTables);
+            siteRepository.save(siteTable);
 
-                        LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
-                        if (existingLemma != null) {
-                            existingLemma.setFrequency(existingLemma.getFrequency() + frequency);
-                        } else {
-                            existingLemma = new LemmaTable();
-                            existingLemma.setSiteId(siteTable);
-                            existingLemma.setLemma(lemmaText);
-                            existingLemma.setFrequency(frequency);
-                            lemmaRepository.saveAndFlush(existingLemma);
-                        }
+            setLemmaAndIndex(siteTable);
 
-                        IndexTable indexTable = new IndexTable();
-                        indexTable.setLemma(existingLemma);
-                        indexTable.setRank(frequency);
-                        indexTable.setPage(pageTable);
-                        indexRepository.saveAndFlush(indexTable);
-
-                    }
-                } catch (Exception ex) {
-                    log.error("Произошла ошибка при обработке страницы: " + ex.getMessage());
-                }
-            }
         } catch (Exception exception) {
             handleIndexingError(exception, siteTable);
-        } finally {
-            siteRepository.saveAndFlush(siteTable);
         }
     }
 
@@ -159,12 +168,18 @@ public class IndexingServiceImpl implements IndexingService {
         setSiteAsFailed(siteTable);
     }
 
+    private boolean urlValid(String url) {
+        List<Site> urlList = sites.getSites();
+        return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
+    }
+
     private void handleIndexingError(Exception exception, SiteTable siteTable) {
         log.error(exception.getMessage());
         siteTable.setStatus(Status.FAILED);
         siteTable.setLastError("Ошибка индексации: " + exception.getMessage());
     }
 
+    //TODO вынести userAgent в конфиг.
     private boolean isMainPageAvailable(String mainPageUrl) {
         try {
             Document mainPage = Jsoup.connect(mainPageUrl)
@@ -184,5 +199,44 @@ public class IndexingServiceImpl implements IndexingService {
     private void setSiteAsFailed(SiteTable siteTable) {
         siteTable.setStatus(Status.FAILED);
         siteTable.setLastError("Главная страница недоступна");
+    }
+
+    private void setLemmaAndIndex(SiteTable siteTable){
+        for (PageTable pageTable : pageRepository.findAll()) {
+            try {
+                HashMap<String, Integer> lemma = lemmaFinder.collectLemmas(pageTable.getContent());
+
+                List<LemmaTable> lemmaTables = new ArrayList<>();
+                List<IndexTable> indexTables = new ArrayList<>();
+
+                for (Map.Entry<String, Integer> entry : lemma.entrySet()) {
+                    String lemmaText = entry.getKey();
+                    int frequency = entry.getValue();
+
+                    LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
+                    if (existingLemma != null) {
+                        existingLemma.setFrequency(existingLemma.getFrequency() + frequency);
+                    } else {
+                        existingLemma = new LemmaTable();
+                        existingLemma.setSiteId(siteTable);
+                        existingLemma.setLemma(lemmaText);
+                        existingLemma.setFrequency(frequency);
+                        lemmaTables.add(existingLemma);
+                    }
+
+                    IndexTable indexTable = new IndexTable();
+                    indexTable.setLemma(existingLemma);
+                    indexTable.setRank(frequency);
+                    indexTable.setPage(pageTable);
+                    indexTables.add(indexTable);
+                }
+
+                lemmaRepository.saveAll(lemmaTables);
+                indexRepository.saveAll(indexTables);
+
+            } catch (Exception ex) {
+                log.error("Произошла ошибка при обработке страницы: " + ex.getMessage());
+            }
+        }
     }
 }

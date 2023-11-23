@@ -4,6 +4,7 @@ import lombok.*;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -28,15 +29,15 @@ public class SiteTable {
     @Column(columnDefinition = "TEXT")
     private String lastError;
 
-    @Column(columnDefinition = "VARCHAR(255)")
+    @Column(columnDefinition = "VARCHAR(255)", nullable = false)
     private String url;
 
     @Column(columnDefinition = "VARCHAR(255)", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY)
-    private List<PageTable> pages;
+    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<PageTable> pages = new ArrayList<>();
 
-    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY)
-    private List<LemmaTable> lemmas;
+    @OneToMany(mappedBy = "siteId", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<LemmaTable> lemmas = new ArrayList<>();
 }

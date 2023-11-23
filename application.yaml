@@ -9,22 +9,21 @@ spring:
   jpa:
     properties:
       hibernate:
+        jdbc:
         dialect: org.hibernate.dialect.MySQL8Dialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
 
 indexing-settings:
   sites:
-#    - url: https://www.tretyakovgallery.ru/
-#      name: tretyakovgallery
-    - url: https://www.svetlovka.ru/
-      name: svetlovka
+#    - url: https://www.svetlovka.ru/
+#      name: svetlovka
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/
 #      name: novosibirsk
-#    - url: https://www.playback.ru/
+#    - url: https://playback.ru/
 #      name: playback
 #    - url: https://skillbox.ru/
 #      name: skillbox
@@ -36,3 +35,5 @@ indexing-settings:
 #      name: volochek
     - url: https://nopaper.ru
       name: nopaper
+#    - url: http://radiomv.ru/
+#      name: radiomv
