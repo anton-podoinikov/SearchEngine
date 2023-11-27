@@ -1,4 +1,4 @@
-package searchengine.splitter;
+package searchengine.morphology;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;

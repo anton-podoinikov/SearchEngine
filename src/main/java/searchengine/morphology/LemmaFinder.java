@@ -1,4 +1,4 @@
-package searchengine.splitter;
+package searchengine.morphology;
 
 import java.util.HashMap;
 import java.util.List;

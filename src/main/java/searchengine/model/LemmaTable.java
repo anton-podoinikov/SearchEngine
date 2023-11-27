@@ -21,7 +21,7 @@ public class LemmaTable {
     private int id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "site_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "site_id", nullable = false)
     private SiteTable siteId;
 
     @Column(columnDefinition = "VARCHAR(255)", nullable = false)
@@ -30,7 +30,7 @@ public class LemmaTable {
     @Column(nullable = false)
     private int frequency;
 
-    @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY,orphanRemoval = true)
     private List<IndexTable> index = new ArrayList<>();
 
 }

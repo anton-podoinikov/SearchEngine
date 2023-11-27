@@ -12,13 +12,13 @@ spring:
         jdbc:
         dialect: org.hibernate.dialect.MySQL8Dialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: create-drop
     show-sql: true
 
 indexing-settings:
   sites:
-#    - url: https://www.svetlovka.ru/
-#      name: svetlovka
+    - url: https://www.svetlovka.ru/
+      name: svetlovka
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/

@@ -71,9 +71,7 @@ public class ApiController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new SearchResponse(false, "Задан пустой поисковый запрос"));
         }
-
         SearchResponse response = searchService.findByLemmaInDatabase(query);
-
         if (response.isResult()) {
             return ResponseEntity.ok(response);
         } else {

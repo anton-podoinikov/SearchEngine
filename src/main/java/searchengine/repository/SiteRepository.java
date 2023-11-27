@@ -12,5 +12,4 @@ public interface SiteRepository extends JpaRepository<SiteTable, Integer> {
     SiteTable findByUrl(String url);
 
     void deleteByUrl(String url);
-
 }

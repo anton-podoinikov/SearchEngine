@@ -19,7 +19,7 @@ public class PageTable {
     private int id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "site_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "site_id", nullable = false)
     private SiteTable siteId;
 
     @Column(columnDefinition = "TEXT, INDEX(path(255))")
@@ -31,6 +31,6 @@ public class PageTable {
     @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
     private String content;
 
-    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, orphanRemoval = true)
+    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY, orphanRemoval = true)
     private List<IndexTable> index = new ArrayList<>();
 }

@@ -19,11 +19,11 @@ public class IndexTable {
     private int id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "page_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "page_id", nullable = false)
     private PageTable page;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "lemma_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "lemma_id", nullable = false)
     private LemmaTable lemma;
 
     @Column(name = "index_rank", nullable = false)
