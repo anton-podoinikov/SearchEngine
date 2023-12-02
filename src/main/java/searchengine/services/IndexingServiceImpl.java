@@ -18,6 +18,8 @@ import searchengine.repository.SiteRepository;
 import searchengine.morphology.LemmaFinderImpl;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -43,30 +45,99 @@ public class IndexingServiceImpl implements IndexingService {
             if (forkJoinPool != null && !forkJoinPool.isTerminated()) {
                 return new IndexingResponse(false, "Индексация уже запущена");
             }
-            forkJoinPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+            initializeThreadPool();
         }
         new Thread(this::startIndexingInternal).start();
         return new IndexingResponse(true);
     }
 
-    //TODO Метод не работат должным образом, разобраться почему и решить проблему!!!
     @Override
     public IndexingResponse startIndexingUrl(String url) {
-        if (urlValid(url)) {
-            SiteTable existingSite = siteRepository.findByUrl(url);
-            if (existingSite == null) {
-                log.error("Сайт с URL " + url + " не найден в базе данных.");
-                return new IndexingResponse(false);
+        synchronized (lock) {
+            // Проверка, что индексация не запущена
+            if (forkJoinPool != null && !forkJoinPool.isTerminated()) {
+                return new IndexingResponse(false, "Индексация уже запущена");
             }
-            Site site = new Site();
-            site.setUrl(url);
-            site.setName(existingSite.getName());
+
+            // Проверка, что переданный URL валиден
+            if (!isValidUrl(url)) {
+                log.error("Недопустимый URL: " + url);
+                return new IndexingResponse(false, "Недопустимый URL");
+            }
+
+//            SiteTable existingSite = siteRepository.findByUrl(url);
+//
+//            // Проверка, что сайт существует в базе данных
+//            if (existingSite == null) {
+//                log.error("Сайт с URL " + url + " не найден в базе данных.");
+//                return new IndexingResponse(false, "Сайт не найден в базе данных");
+//            }
+
+            // Проверка, что страница не была уже проиндексирована
+            PageTable existingPage = pageRepository.findByPath(url);
+
+            if (existingPage != null) {
+                // Удаление связанных данных
+//                indexRepository.deleteByPageId(existingPage.getId());
+                lemmaRepository.deleteBySiteId(existingPage.getSiteId().getId());
+                pageRepository.delete(existingPage);
+            }
+
+            SiteTable siteTable = new SiteTable();
+
+            try {
+                URL urlObject = new URL(url);
+                String domain = urlObject.getHost();
+                siteTable.setUrl("https://" + domain);
+                siteTable.setName(domain.split("\\.")[0]);
+                siteTable.setStatusTime(LocalDateTime.now());
+                siteTable.setStatus(Status.INDEXING);
+            } catch (MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+
+            // Запуск индексации только для этой страницы
+            initializeThreadPool();
+            new Thread(() -> indexSinglePage(siteTable, url)).start();
+
             return new IndexingResponse(true);
-        } else {
-            log.error("Недопустимый URL: " + url);
-            return new IndexingResponse(false);
         }
     }
+
+    private void indexSinglePage(SiteTable siteTable, String url) {
+        try {
+            // Индексация одной страницы
+            ParseHtml parseHtml = new ParseHtml(url, siteTable, siteRepository);
+            forkJoinPool.invoke(parseHtml);
+            Set<Link> links = Collections.synchronizedSet(new HashSet<>(parseHtml.getLinks()));
+            Set<PageTable> pageTables = Collections.synchronizedSet(new HashSet<>());
+
+            for (Link link : links) {
+                if (isPageFromIndexedSite(link.getPath(), siteTable)) {
+                    PageTable pageTable = new PageTable();
+                    pageTable.setSiteId(siteTable);
+                    pageTable.setContent(link.getContent());
+                    pageTable.setPath(link.getPath());
+                    pageTable.setCode(link.getCode());
+                    pageTables.add(pageTable);
+                } else {
+                    log.error("Попытка индексации страницы с другого сайта: " + link.getPath());
+                    // Вернуть ошибку, например, через API или бросить исключение
+                }
+            }
+
+            savePageInRepository(pageTables, siteTable);
+            parseHtml.clearPages();
+        } catch (Exception exception) {
+            log.info(exception.getMessage());
+        } finally {
+            synchronized (lock) {
+                forkJoinPool.shutdownNow();
+                forkJoinPool = null;
+            }
+        }
+    }
+
 
     @Override
     public IndexingResponse stopIndexing() {
@@ -126,11 +197,11 @@ public class IndexingServiceImpl implements IndexingService {
     private void setLemmaAndIndex(SiteTable siteTable) {
         for (PageTable pageTable : pageRepository.findAll()) {
             try {
-                HashMap<String, Integer> lemma = lemmaFinder.collectLemmas(pageTable.getContent());
+                Map<String, Integer> lemmas = lemmaFinder.collectLemmas(pageTable.getContent());
                 List<LemmaTable> lemmaTables = new ArrayList<>();
                 List<IndexTable> indexTables = new ArrayList<>();
 
-                for (Map.Entry<String, Integer> entry : lemma.entrySet()) {
+                for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
                     String lemmaText = entry.getKey();
                     int frequency = entry.getValue();
                     LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
@@ -151,8 +222,10 @@ public class IndexingServiceImpl implements IndexingService {
                 }
                 lemmaRepository.saveAll(lemmaTables);
                 indexRepository.saveAll(indexTables);
-            } catch (Exception ex) {
-                log.error("Произошла ошибка при обработке страницы: " + ex.getMessage());
+                lemmaTables.clear();
+                indexTables.clear();
+            } catch (Exception exception) {
+                log.error("An error occurred while processing the page: " + exception.getMessage());
             }
         }
     }
@@ -167,7 +240,7 @@ public class IndexingServiceImpl implements IndexingService {
         siteRepository.deleteByUrl(siteTable.getUrl());
     }
 
-    private boolean urlValid(String url) {
+    private boolean isValidUrl(String url) {
         List<Site> urlList = sites.getSites();
         return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
     }
@@ -225,5 +298,13 @@ public class IndexingServiceImpl implements IndexingService {
                 forkJoinPool = null;
             }
         }
+    }
+
+    private void initializeThreadPool() {
+        forkJoinPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+    }
+
+    private boolean isPageFromIndexedSite(String pagePath, SiteTable siteTable) {
+        return pagePath.startsWith(siteTable.getUrl());
     }
 }

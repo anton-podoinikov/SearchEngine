@@ -34,7 +34,7 @@ public class ApiController {
             return ResponseEntity.ok(response);
         } else {
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
+                    .status(HttpStatus.OK)
                     .body(new IndexingResponse(false, "Индексация уже запущена"));
         }
     }
@@ -46,7 +46,7 @@ public class ApiController {
             return ResponseEntity.ok(response);
         } else {
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
+                    .status(HttpStatus.OK)
                     .body(new IndexingResponse(false, "Индексация не запущена"));
         }
     }
@@ -58,7 +58,7 @@ public class ApiController {
             return ResponseEntity.ok(response);
         } else {
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
+                    .status(HttpStatus.OK)
                     .body(new IndexingResponse(false, "Данная страница находится за пределами сайтов, " +
                             "указанных в конфигурационном файле"));
         }
@@ -68,14 +68,14 @@ public class ApiController {
     @GetMapping("/search")
     public ResponseEntity<SearchResponse> search(String query) {
         if (query.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            return ResponseEntity.status(HttpStatus.OK)
                     .body(new SearchResponse(false, "Задан пустой поисковый запрос"));
         }
         SearchResponse response = searchService.findByLemmaInDatabase(query);
         if (response.isResult()) {
             return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            return ResponseEntity.status(HttpStatus.OK)
                     .body(new SearchResponse(false, "Указанная страница не найдена"));
         }
     }

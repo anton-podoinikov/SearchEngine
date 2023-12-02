@@ -31,6 +31,6 @@ public class PageTable {
     @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
     private String content;
 
-    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY, orphanRemoval = true)
+    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<IndexTable> index = new ArrayList<>();
 }

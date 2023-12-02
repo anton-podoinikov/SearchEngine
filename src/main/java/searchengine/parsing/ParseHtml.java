@@ -21,7 +21,6 @@ public class ParseHtml extends RecursiveAction {
     private final String url;
     private final SiteTable siteTable;
     private final SiteRepository siteRepository;
-
     private static final Set<Link> links = Collections.synchronizedSet(new HashSet<>());
     private static final Set<String> pages = Collections.synchronizedSet(new HashSet<>());
 

@@ -30,7 +30,7 @@ public class LemmaTable {
     @Column(nullable = false)
     private int frequency;
 
-    @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY,orphanRemoval = true)
+    @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<IndexTable> index = new ArrayList<>();
 
 }
