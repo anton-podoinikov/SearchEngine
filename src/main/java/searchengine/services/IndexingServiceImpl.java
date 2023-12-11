@@ -2,8 +2,6 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 import searchengine.model.*;
 import searchengine.parsing.Link;
@@ -17,7 +15,7 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.morphology.LemmaFinderImpl;
 
-import java.io.IOException;
+
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDateTime;
@@ -54,100 +52,64 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse startIndexingUrl(String url) {
         synchronized (lock) {
-            // Проверка, что индексация не запущена
-            if (forkJoinPool != null && !forkJoinPool.isTerminated()) {
-                return new IndexingResponse(false, "Индексация уже запущена");
-            }
-
-            // Проверка, что переданный URL валиден
-            if (!isValidUrl(url)) {
-                log.error("Недопустимый URL: " + url);
-                return new IndexingResponse(false, "Недопустимый URL");
-            }
-
-//            SiteTable existingSite = siteRepository.findByUrl(url);
-//
-//            // Проверка, что сайт существует в базе данных
-//            if (existingSite == null) {
-//                log.error("Сайт с URL " + url + " не найден в базе данных.");
-//                return new IndexingResponse(false, "Сайт не найден в базе данных");
-//            }
-
-            // Проверка, что страница не была уже проиндексирована
+            String domain = "https://" + urlToParentUrl(url) + "/";
+            SiteTable existingSite = siteRepository.findByUrl(domain);
             PageTable existingPage = pageRepository.findByPath(url);
 
+            if (forkJoinPool != null && !forkJoinPool.isTerminated()) {
+                return new IndexingResponse(false, "Indexing is already in progress");
+            }
+
+            if (!isValidUrl(url)) {
+                log.error("Invalid URL: " + url);
+                return new IndexingResponse(false, "Invalid URL");
+            }
+
             if (existingPage != null) {
-                // Удаление связанных данных
-//                indexRepository.deleteByPageId(existingPage.getId());
-                lemmaRepository.deleteBySiteId(existingPage.getSiteId().getId());
-                pageRepository.delete(existingPage);
+                deleteRelatedData(existingPage);
             }
 
-            SiteTable siteTable = new SiteTable();
-
-            try {
-                URL urlObject = new URL(url);
-                String domain = urlObject.getHost();
-                siteTable.setUrl("https://" + domain);
-                siteTable.setName(domain.split("\\.")[0]);
-                siteTable.setStatusTime(LocalDateTime.now());
-                siteTable.setStatus(Status.INDEXING);
-            } catch (MalformedURLException e) {
-                throw new RuntimeException(e);
+            if (existingSite == null) {
+                existingSite = createSiteTable(url);
             }
 
-            // Запуск индексации только для этой страницы
             initializeThreadPool();
-            new Thread(() -> indexSinglePage(siteTable, url)).start();
-
+            SiteTable finalExistingSite = existingSite;
+            new Thread(() -> indexSinglePage(finalExistingSite, url)).start();
             return new IndexingResponse(true);
         }
     }
 
     private void indexSinglePage(SiteTable siteTable, String url) {
         try {
-            // Индексация одной страницы
-            ParseHtml parseHtml = new ParseHtml(url, siteTable, siteRepository);
+            ParseHtml parseHtml = new ParseHtml(url, siteTable, siteRepository, pageRepository);
             forkJoinPool.invoke(parseHtml);
-            Set<Link> links = Collections.synchronizedSet(new HashSet<>(parseHtml.getLinks()));
-            Set<PageTable> pageTables = Collections.synchronizedSet(new HashSet<>());
+            Set<Link> links = new CopyOnWriteArraySet<>(parseHtml.getLinks());
+            Set<PageTable> pageTables = new CopyOnWriteArraySet<>();
 
-            for (Link link : links) {
-                if (isPageFromIndexedSite(link.getPath(), siteTable)) {
-                    PageTable pageTable = new PageTable();
-                    pageTable.setSiteId(siteTable);
-                    pageTable.setContent(link.getContent());
-                    pageTable.setPath(link.getPath());
-                    pageTable.setCode(link.getCode());
-                    pageTables.add(pageTable);
-                } else {
-                    log.error("Попытка индексации страницы с другого сайта: " + link.getPath());
-                    // Вернуть ошибку, например, через API или бросить исключение
-                }
-            }
+            links.stream()
+                    .filter(link -> isPageFromIndexedSite(link.getPath(), siteTable))
+                    .forEach(link -> {
+                        PageTable pageTable = new PageTable();
+                        pageTable.setSiteId(siteTable);
+                        pageTable.setContent(link.getContent());
+                        pageTable.setPath(link.getPath());
+                        pageTable.setCode(link.getCode());
+                        pageTables.add(pageTable);
+                    });
 
-            savePageInRepository(pageTables, siteTable);
+            savePageInRepository(pageTables);
+            saveLemmaAndIndex(siteTable);
             parseHtml.clearPages();
         } catch (Exception exception) {
             log.info(exception.getMessage());
         } finally {
             synchronized (lock) {
-                forkJoinPool.shutdownNow();
-                forkJoinPool = null;
+                if (forkJoinPool != null) {
+                    forkJoinPool.shutdownNow();
+                    forkJoinPool = null;
+                }
             }
-        }
-    }
-
-
-    @Override
-    public IndexingResponse stopIndexing() {
-        try {
-            indexingThreads.forEach(Thread::interrupt);
-            forkJoinPool.shutdownNow();
-            return new IndexingResponse(true);
-        } catch (Exception e) {
-            log.error(e.getMessage());
-            return new IndexingResponse(false, "Произошла ошибка при остановке индексирования.");
         }
     }
 
@@ -164,10 +126,23 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
+    @Override
+    public IndexingResponse stopIndexing() {
+        try {
+            indexingThreads.forEach(Thread::interrupt);
+            forkJoinPool.shutdownNow();
+            return new IndexingResponse(true);
+        } catch (Exception e) {
+            log.error(e.getMessage());
+            return new IndexingResponse(false, "Произошла ошибка при остановке индексирования.");
+        }
+    }
+
+
     private void indexSite(SiteTable siteTable) {
-        ParseHtml parseHtml = new ParseHtml(siteTable.getUrl(), siteTable, siteRepository);
+        ParseHtml parseHtml = new ParseHtml(siteTable.getUrl(), siteTable, siteRepository, pageRepository);
         forkJoinPool.invoke(parseHtml);
-        Set<Link> links = Collections.synchronizedSet(new HashSet<>(parseHtml.getLinks()));
+        Set<Link> links = new CopyOnWriteArraySet<>(parseHtml.getLinks());
         Set<PageTable> pageTables = Collections.synchronizedSet(new HashSet<>());
         try {
             for (Link link : links) {
@@ -180,96 +155,195 @@ public class IndexingServiceImpl implements IndexingService {
                     pageTables.add(pageTable);
                 }
             }
-            savePageInRepository(pageTables, siteTable);
-            parseHtml.clearPages();
+            savePageInRepository(pageTables);
+            saveLemmaAndIndex(siteTable);
         } catch (Exception exception) {
             log.info(exception.getMessage());
         }
     }
 
-    private void savePageInRepository(Set<PageTable> pageTables, SiteTable siteTable) {
+
+    private void savePageInRepository(Set<PageTable> pageTables) {
         pageRepository.saveAll(pageTables);
-        siteTable.setStatus(Status.INDEXED);
-        siteRepository.save(siteTable);
+    }
+
+    private void saveLemmaAndIndex(SiteTable siteTable) {
         setLemmaAndIndex(siteTable);
     }
 
-    private void setLemmaAndIndex(SiteTable siteTable) {
-        for (PageTable pageTable : pageRepository.findAll()) {
-            try {
-                Map<String, Integer> lemmas = lemmaFinder.collectLemmas(pageTable.getContent());
-                List<LemmaTable> lemmaTables = new ArrayList<>();
-                List<IndexTable> indexTables = new ArrayList<>();
 
-                for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
-                    String lemmaText = entry.getKey();
-                    int frequency = entry.getValue();
-                    LemmaTable existingLemma = lemmaRepository.findByLemma(lemmaText);
-                    if (existingLemma != null) {
-                        existingLemma.setFrequency(existingLemma.getFrequency() + frequency);
-                    } else {
-                        existingLemma = new LemmaTable();
-                        existingLemma.setSiteId(siteTable);
-                        existingLemma.setLemma(lemmaText);
-                        existingLemma.setFrequency(frequency);
-                        lemmaTables.add(existingLemma);
-                    }
-                    IndexTable indexTable = new IndexTable();
-                    indexTable.setLemma(existingLemma);
-                    indexTable.setRank(frequency);
-                    indexTable.setPage(pageTable);
-                    indexTables.add(indexTable);
-                }
-                lemmaRepository.saveAll(lemmaTables);
-                indexRepository.saveAll(indexTables);
-                lemmaTables.clear();
-                indexTables.clear();
-            } catch (Exception exception) {
-                log.error("An error occurred while processing the page: " + exception.getMessage());
-            }
-        }
+    private void setLemmaAndIndex(SiteTable siteTable) {
+        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
+        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+
+        pageRepository.findAllBySiteId(siteTable)
+                .stream()
+                .filter(pageTable -> pageTable.getCode() == 200)
+                .forEach(pageTable -> {
+                    String content = pageTable.getContent();
+                    Map<String, Integer> lemmas = lemmaFinder.collectLemmas(content);
+
+                    lemmas.forEach((key, value) -> {
+                        LemmaTable existingLemmaTable = lemmaTableMap.get(key);
+                        if (existingLemmaTable == null) {
+                            LemmaTable newLemmaTable = new LemmaTable();
+                            newLemmaTable.setLemma(key);
+                            newLemmaTable.setSiteId(siteTable);
+                            newLemmaTable.setFrequency(1);
+                            lemmaTableMap.put(key, newLemmaTable);
+                        } else {
+                            existingLemmaTable.setFrequency(existingLemmaTable.getFrequency() + 1);
+                        }
+
+                        IndexTable indexTable = new IndexTable();
+                        indexTable.setLemma(lemmaTableMap.get(key));
+                        indexTable.setPage(pageTable);
+                        indexTable.setRank(value);
+                        indexTables.add(indexTable);
+                    });
+                });
+
+        lemmaRepository.saveAll(lemmaTableMap.values());
+        indexRepository.saveAll(indexTables);
+
+        siteTable.setStatus(Status.INDEXED);
+        siteRepository.save(siteTable);
     }
+
+
+    private SiteTable createSiteTable(String url) {
+        SiteTable siteTable = new SiteTable();
+        String domain = urlToParentUrl(url);
+
+            siteTable.setUrl("https://" + domain + "/");
+            siteTable.setName(domain.split("\\.")[0]);
+            siteTable.setStatusTime(LocalDateTime.now());
+            siteTable.setStatus(Status.INDEXING);
+
+        return siteTable;
+    }
+
+//    private void setLemmaAndIndex(SiteTable siteTable) {
+//        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
+//        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+//
+//        pageRepository.findAllBySiteId(siteTable)
+//                .stream()
+//                .filter(pageTable -> pageTable.getCode() == 200)
+//                .forEach(pageTable -> {
+//                    String content = pageTable.getContent();
+//                    Map<String, Integer> lemmas = lemmaFinder.collectLemmas(content);
+//
+//                    lemmas.forEach((key, value) -> {
+//                        lemmaTableMap.compute(key, (k, existingLemmaTable) -> {
+//                            if (existingLemmaTable == null) {
+//                                LemmaTable newLemmaTable = new LemmaTable();
+//                                newLemmaTable.setLemma(k);
+//                                newLemmaTable.setSiteId(siteTable);
+//                                newLemmaTable.setFrequency(value);
+//                                return newLemmaTable;
+//                            } else {
+//                                AtomicInteger frequency = new AtomicInteger(existingLemmaTable.getFrequency());
+//                                frequency.addAndGet(value);
+//                                existingLemmaTable.setFrequency(frequency.get());
+//                                return existingLemmaTable;
+//                            }
+//                        });
+//
+//                        LemmaTable lemmaTable = lemmaTableMap.get(key);
+//
+//                        IndexTable indexTable = new IndexTable();
+//                        indexTable.setLemma(lemmaTable);
+//                        indexTable.setPage(pageTable);
+//                        indexTable.setRank(lemmaTable.getFrequency());
+//                        indexTables.add(indexTable);
+//                    });
+//                });
+//
+//        lemmaRepository.saveAll(lemmaTableMap.values());
+//        indexRepository.saveAll(indexTables);
+//
+//        siteTable.setStatus(Status.INDEXED);
+//        siteRepository.save(siteTable);
+//    }
+
+
+//    private void setLemmaAndIndex(SiteTable siteTable) {
+//        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
+//        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+//
+//        pageRepository.findAllBySiteId(siteTable)
+//                .stream()
+//                .filter(pageTable -> pageTable.getCode() == 200)
+//                .forEach(pageTable -> {
+//                    String content = pageTable.getContent();
+//                    Map<String, Integer> lemmas = lemmaFinder.collectLemmas(content);
+//
+//                    lemmas.forEach((key, value) -> {
+//                        LemmaTable lemmaTable = lemmaTableMap.computeIfAbsent(key, k -> {
+//                            LemmaTable newLemmaTable = new LemmaTable();
+//                            newLemmaTable.setLemma(k);
+//                            newLemmaTable.setSiteId(siteTable);
+//                            return newLemmaTable;
+//                        });
+//
+//                        synchronized (lemmaTable) {
+//                            lemmaTable.setFrequency(lemmaTable.getFrequency() + value);
+//                        }
+//
+//                        IndexTable indexTable = new IndexTable();
+//                        indexTable.setLemma(lemmaTable);
+//                        indexTable.setPage(pageTable);
+//                        indexTable.setRank(lemmaTable.getFrequency());
+//
+//                        synchronized (indexTables) {
+//                            indexTables.add(indexTable);
+//                        }
+//                    });
+//                });
+//
+//        lemmaRepository.saveAll(lemmaTableMap.values());
+//        indexRepository.saveAll(indexTables);
+//
+//        siteTable.setStatus(Status.INDEXED);
+//        siteRepository.save(siteTable);
+//    }
+
+
+//        pageRepository.findAllBySiteId(siteTable).forEach(pageTable -> {
+//            if (pageTable.getCode() == 200) {
+//                String content = pageTable.getContent();
+//                Map<String, Integer> lemmas = lemmaFinder.collectLemmas(content);
+//                lemmas.forEach((key, value) -> {
+//                    if (lemmaRepository.findByLemmaAAndSiteId(key, siteTable) == null) {
+//                        LemmaTable lemmaTable = new LemmaTable();
+//                        IndexTable indexTable = new IndexTable();
+//                        lemmaTable.setLemma(key);
+//                        lemmaTable.setFrequency(value);
+//                        lemmaTable.setSiteId(siteTable);
+//                        indexTable.setPage(pageTable);
+//                        indexTable.setLemma(lemmaTable);
+//                        indexTable.setRank(value);
+//                        lemmaRepository.save(lemmaTable);
+//                        indexRepository.save(indexTable);
+//                    } else {
+//                        LemmaTable lemmaTable = lemmaRepository.findByLemmaAAndSiteId(key, siteTable);
+//                        lemmaTable.setFrequency(lemmaTable.getFrequency() + value);
+//                        IndexTable indexTable = new IndexTable();
+//                        indexTable.setLemma(lemmaTable);
+//                        indexTable.setPage(pageTable);
+//                        indexTable.setRank(lemmaTable.getFrequency());
+//                        lemmaRepository.save(lemmaTable);
+//                        indexRepository.save(indexTable);
+//                    }
+//                });
+//            }
+//        });
 
     private void checkRepeatInBase(Site site) {
         if (siteRepository.findByUrl(site.getUrl()) != null) {
             deleteSite(siteRepository.findByUrl(site.getUrl()));
         }
-    }
-
-    private void deleteSite(SiteTable siteTable) {
-        siteRepository.deleteByUrl(siteTable.getUrl());
-    }
-
-    private boolean isValidUrl(String url) {
-        List<Site> urlList = sites.getSites();
-        return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
-    }
-
-    //TODO вынести userAgent в конфиг.
-    private boolean isMainPageAvailable(String mainPageUrl) {
-        try {
-            Document mainPage = Jsoup.connect(mainPageUrl)
-                    .ignoreHttpErrors(true)
-                    .ignoreContentType(true)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)" +
-                            "AppleWebKit/537.36 (HTML, like Gecko)" +
-                            "Chrome/58.0.3029.110 Safari/537.3")
-                    .get();
-            int statusCode = mainPage.connection().response().statusCode();
-            return statusCode == 200;
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
-    private void handleMainPageUnavailable(String siteUrl, SiteTable siteTable) {
-        log.error("Главная страница сайта " + siteUrl + " недоступна.");
-        setSiteAsFailed(siteTable);
-    }
-
-    private void setSiteAsFailed(SiteTable siteTable) {
-        siteTable.setStatus(Status.FAILED);
-        siteTable.setLastError("Главная страница недоступна");
     }
 
     private void startIndexingInternal() {
@@ -300,11 +374,45 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
+    private void deleteSite(SiteTable siteTable) {
+        siteRepository.deleteByUrl(siteTable.getUrl());
+    }
+
+    private boolean isValidUrl(String url) {
+        List<Site> urlList = sites.getSites();
+        return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
+    }
+
+    private void handleMainPageUnavailable(String siteUrl, SiteTable siteTable) {
+        log.error("Главная страница сайта " + siteUrl + " недоступна.");
+        setSiteAsFailed(siteTable);
+    }
+
+    private void setSiteAsFailed(SiteTable siteTable) {
+        siteTable.setStatus(Status.FAILED);
+        siteTable.setLastError("Главная страница недоступна");
+    }
+
     private void initializeThreadPool() {
         forkJoinPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
     }
 
     private boolean isPageFromIndexedSite(String pagePath, SiteTable siteTable) {
         return pagePath.startsWith(siteTable.getUrl());
+    }
+
+    private void deleteRelatedData(PageTable existingPage) {
+        lemmaRepository.deleteBySiteId(existingPage.getSiteId());
+        pageRepository.deleteBySiteId(existingPage.getSiteId());
+    }
+
+    private String urlToParentUrl(String url) {
+        URL urlObject;
+        try {
+            urlObject = new URL(url);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
+        return urlObject.getHost();
     }
 }

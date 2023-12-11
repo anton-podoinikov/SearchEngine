@@ -17,13 +17,15 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://www.svetlovka.ru/
-      name: svetlovka
+    - url: https://nopaper.ru/
+      name: nopaper
+#    - url: https://www.svetlovka.ru/
+#      name: svetlovka
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/
 #      name: novosibirsk
-#    - url: https://playback.ru/
+#    - url: http://playback.ru/
 #      name: playback
 #    - url: https://skillbox.ru/
 #      name: skillbox
@@ -33,9 +35,8 @@ indexing-settings:
 #      name: ipfran
 #    - url: https://volochek.life/
 #      name: volochek
-    - url: https://nopaper.ru
-      name: nopaper
-#    - url: http://radiomv.ru/
-#      name: radiomv
+
+#    - url: https://4pda.to/
+#      name: 4pda
 #    - url: https://dombulgakova.ru/
 #      name: dombulgakova
