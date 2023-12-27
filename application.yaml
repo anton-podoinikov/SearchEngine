@@ -12,15 +12,15 @@ spring:
         jdbc:
         dialect: org.hibernate.dialect.MySQL8Dialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
 
 indexing-settings:
   sites:
     - url: https://nopaper.ru/
-      name: nopaper
-#    - url: https://www.svetlovka.ru/
-#      name: svetlovka
+      name: Nopaper
+    - url: https://www.svetlovka.ru/
+      name: Светловка
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/
@@ -35,7 +35,6 @@ indexing-settings:
 #      name: ipfran
 #    - url: https://volochek.life/
 #      name: volochek
-
 #    - url: https://4pda.to/
 #      name: 4pda
 #    - url: https://dombulgakova.ru/

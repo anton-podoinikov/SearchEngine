@@ -57,7 +57,7 @@ public class ParseHtml extends RecursiveAction {
                     Document documentChildren = connection(linkUrl);
 
                     link.setPath(linkUrl);
-                    link.setContent(documentChildren.text());
+                    link.setContent(documentChildren.html());
                     link.setCode(documentChildren.connection().response().statusCode());
 
                     links.add(link);

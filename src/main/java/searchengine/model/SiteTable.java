@@ -9,7 +9,8 @@ import java.util.List;
 
 @Entity
 @Table(name = "site")
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 public class SiteTable {

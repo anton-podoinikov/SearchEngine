@@ -64,19 +64,27 @@ public class ApiController {
         }
     }
 
-    //TODO Написать контроллер поиска.
     @GetMapping("/search")
-    public ResponseEntity<SearchResponse> search(String query) {
-        if (query.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.OK)
-                    .body(new SearchResponse(false, "Задан пустой поисковый запрос"));
+    public ResponseEntity<SearchResponse> search(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String site,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "20") int limit) {
+        if (query == null || query.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new SearchResponse(false, "Пустой поисковый запрос"));
         }
-        SearchResponse response = searchService.findByLemmaInDatabase(query);
+        SearchResponse response;
+        if (site != null && !site.isEmpty()) {
+            response = searchService.findByLemmaInDatabase(query, site, offset, limit);
+        } else {
+            response = searchService.findByLemmaInDatabase(query, offset, limit);
+        }
         if (response.isResult()) {
             return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.status(HttpStatus.OK)
-                    .body(new SearchResponse(false, "Указанная страница не найдена"));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new SearchResponse(false, "По запросу не найдено результатов '" + query + "'"));
         }
     }
 }

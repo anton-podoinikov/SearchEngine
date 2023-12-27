@@ -8,7 +8,8 @@ import java.util.List;
 
 @Entity
 @Table(name = "page")
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 public class PageTable {

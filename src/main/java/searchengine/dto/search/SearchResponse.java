@@ -1,18 +1,21 @@
 package searchengine.dto.search;
 
-import lombok.Data;
-
 import java.util.List;
 
-@Data
+@lombok.Data
 public class SearchResponse {
     private boolean result;
     private String error;
     private int count;
-    private List<SearchData> searchData;
+    private List<Data> data; // Обновлено с searchData на data
 
     public SearchResponse(boolean result, String error) {
         this.result = result;
         this.error = error;
+    }
+
+    public void setResults(List<Data> results) {
+        this.data = results;
+        this.count = results.size();
     }
 }
