@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import searchengine.model.*;
-import searchengine.parsing.Link;
-import searchengine.parsing.ParseHtml;
+import searchengine.services.parsing.Link;
+import searchengine.services.parsing.ParseHtml;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
@@ -13,7 +13,7 @@ import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
-import searchengine.morphology.LemmaFinderImpl;
+import searchengine.services.morphology.LemmaFinderImpl;
 
 
 import java.net.MalformedURLException;
@@ -21,6 +21,7 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -94,26 +95,31 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
-
     private void indexSite(SiteTable siteTable) {
         ParseHtml parseHtml = new ParseHtml(siteTable.getUrl(), siteTable, siteRepository, pageRepository);
         forkJoinPool.invoke(parseHtml);
         Set<Link> links = new CopyOnWriteArraySet<>(parseHtml.getLinks());
-        Set<PageTable> pageTables = Collections.synchronizedSet(new HashSet<>());
-        for (Link link : links) {
-            if (link.getPath().startsWith(siteTable.getUrl())) {
-                PageTable pageTable = new PageTable();
-                pageTable.setSiteId(siteTable);
-                pageTable.setContent(link.getContent());
-                pageTable.setPath(absoluteToRelative(siteTable.getUrl(), link.getPath()));
-                pageTable.setCode(link.getCode());
-                pageTables.add(pageTable);
-            }
+        Set<PageTable> pageTables = links.stream()
+                .filter(link -> link.getPath().startsWith(siteTable.getUrl()))
+                .map(link -> createPageFromLink(link, siteTable))
+                .collect(Collectors.toSet());
+        processAndSavePages(pageTables, siteTable);
+    }
+
+    private void indexSinglePage(SiteTable siteTable, String url) {
+        try {
+            ParseHtml parseHtml = new ParseHtml(url, siteTable, siteRepository, pageRepository);
+            forkJoinPool.invoke(parseHtml);
+            parseHtml.getLinks().stream()
+                    .filter(link -> link.getPath().equals(url))
+                    .findFirst()
+                    .map(link -> createPageFromLink(link, siteTable))
+                    .ifPresent(pageTable -> processAndSavePages(Set.of(pageTable), siteTable));
+        } catch (Exception exception) {
+            log.info(exception.getMessage());
+        } finally {
+            cleanupAfterParsing();
         }
-        savePageInRepository(pageTables);
-        setLemmaAndIndexSite(siteTable);
-        siteTable.setStatus(Status.INDEXED);
-        siteRepository.save(siteTable);
     }
 
     private void saveSitesInRepository() {
@@ -122,40 +128,6 @@ public class IndexingServiceImpl implements IndexingService {
             checkRepeatInBase(site);
             SiteTable siteTable = createSite(site);
             siteRepository.save(siteTable);
-        }
-    }
-
-    private void indexSinglePage(SiteTable siteTable, String url) {
-        try {
-            ParseHtml parseHtml = new ParseHtml(url, siteTable, siteRepository, pageRepository);
-            forkJoinPool.invoke(parseHtml);
-            Set<Link> links = new CopyOnWriteArraySet<>(parseHtml.getLinks());
-
-            Optional<Link> targetLink = links.stream()
-                    .filter(link -> link.getPath().equals(url))
-                    .findFirst();
-
-            targetLink.ifPresent(link -> {
-                PageTable pageTable = new PageTable();
-                pageTable.setSiteId(siteTable);
-                pageTable.setContent(link.getContent());
-                pageTable.setPath(absoluteToRelative(siteTable.getUrl(), link.getPath()));
-                pageTable.setCode(link.getCode());
-
-                savePageInRepository(Set.of(pageTable));
-                setLemmaAndIndexPage(pageTable);
-            });
-
-            parseHtml.clearPages();
-        } catch (Exception exception) {
-            log.info(exception.getMessage());
-        } finally {
-            synchronized (lock) {
-                if (forkJoinPool != null) {
-                    forkJoinPool.shutdownNow();
-                    forkJoinPool = null;
-                }
-            }
         }
     }
 
@@ -168,14 +140,28 @@ public class IndexingServiceImpl implements IndexingService {
         return siteTable;
     }
 
-
-    private void savePageInRepository(Set<PageTable> pageTables) {
-        pageRepository.saveAll(pageTables);
-    }
-
     private void setLemmaAndIndexPage(PageTable pageTable) {
         Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
         List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+        processLemmasAndIndexes(pageTable, lemmaTableMap, indexTables);
+        lemmaRepository.saveAll(lemmaTableMap.values());
+        indexRepository.saveAll(indexTables);
+    }
+
+    private void setLemmaAndIndexSite(SiteTable siteTable) {
+        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
+        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+        pageRepository.findAllBySiteId(siteTable)
+                .stream()
+                .filter(pageTable -> pageTable.getCode() == 200)
+                .forEach(pageTable -> processLemmasAndIndexes(pageTable, lemmaTableMap, indexTables));
+        lemmaRepository.saveAll(lemmaTableMap.values());
+        indexRepository.saveAll(indexTables);
+    }
+
+    private void processLemmasAndIndexes(PageTable pageTable
+            , Map<String, LemmaTable> lemmaTableMap
+            , List<IndexTable> indexTables) {
 
         if (pageTable.getCode() == 200) {
             String content = pageTable.getContent();
@@ -200,45 +186,6 @@ public class IndexingServiceImpl implements IndexingService {
                 indexTables.add(indexTable);
             });
         }
-
-        lemmaRepository.saveAll(lemmaTableMap.values());
-        indexRepository.saveAll(indexTables);
-    }
-
-
-    private void setLemmaAndIndexSite(SiteTable siteTable) {
-        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
-        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
-
-        pageRepository.findAllBySiteId(siteTable)
-                .stream()
-                .filter(pageTable -> pageTable.getCode() == 200)
-                .forEach(pageTable -> {
-                    String content = pageTable.getContent();
-                    Map<String, Integer> lemmas = lemmaFinder.collectLemmas(content);
-
-                    lemmas.forEach((key, value) -> {
-                        LemmaTable existingLemmaTable = lemmaTableMap.get(key);
-                        if (existingLemmaTable == null) {
-                            LemmaTable newLemmaTable = new LemmaTable();
-                            newLemmaTable.setLemma(key);
-                            newLemmaTable.setSiteId(siteTable);
-                            newLemmaTable.setFrequency(1);
-                            lemmaTableMap.put(key, newLemmaTable);
-                        } else {
-                            existingLemmaTable.setFrequency(existingLemmaTable.getFrequency() + 1);
-                        }
-
-                        IndexTable indexTable = new IndexTable();
-                        indexTable.setLemma(lemmaTableMap.get(key));
-                        indexTable.setPage(pageTable);
-                        indexTable.setRank(value);
-                        indexTables.add(indexTable);
-                    });
-                });
-
-        lemmaRepository.saveAll(lemmaTableMap.values());
-        indexRepository.saveAll(indexTables);
     }
 
     private SiteTable createSiteInTableForSinglePage(String url) {
@@ -251,12 +198,6 @@ public class IndexingServiceImpl implements IndexingService {
         siteTable.setStatus(Status.INDEXING);
 
         return siteTable;
-    }
-
-    private void checkRepeatInBase(Site site) {
-        if (siteRepository.findByUrl(site.getUrl()) != null) {
-            deleteSite(siteRepository.findByUrl(site.getUrl()));
-        }
     }
 
     private void startIndexingInternal() {
@@ -283,19 +224,6 @@ public class IndexingServiceImpl implements IndexingService {
                 forkJoinPool = null;
             }
         }
-    }
-
-    private void deleteSite(SiteTable siteTable) {
-        siteRepository.deleteByUrl(siteTable.getUrl());
-    }
-
-    private boolean isValidUrl(String url) {
-        List<Site> urlList = sites.getSites();
-        return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
-    }
-
-    private void initializeThreadPool() {
-        forkJoinPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
     }
 
     private void deleteRelatedData(PageTable existingPage) {
@@ -336,5 +264,57 @@ public class IndexingServiceImpl implements IndexingService {
             return absoluteUrl.substring(baseUrl.length());
         }
         return absoluteUrl;
+    }
+
+    private PageTable createPageFromLink(Link link, SiteTable siteTable) {
+        PageTable pageTable = new PageTable();
+        pageTable.setSiteId(siteTable);
+        pageTable.setContent(link.getContent());
+        pageTable.setPath(absoluteToRelative(siteTable.getUrl(), link.getPath()));
+        pageTable.setCode(link.getCode());
+        return pageTable;
+    }
+
+    private void processAndSavePages(Set<PageTable> pageTables, SiteTable siteTable) {
+        savePageInRepository(pageTables);
+        if (pageTables.size() > 1) {
+            setLemmaAndIndexSite(siteTable);
+        } else {
+            pageTables.forEach(this::setLemmaAndIndexPage);
+        }
+        siteTable.setStatus(Status.INDEXED);
+        siteRepository.save(siteTable);
+    }
+
+    private void savePageInRepository(Set<PageTable> pageTables) {
+        pageRepository.saveAll(pageTables);
+    }
+
+    private void cleanupAfterParsing() {
+        synchronized (lock) {
+            if (forkJoinPool != null) {
+                forkJoinPool.shutdownNow();
+                forkJoinPool = null;
+            }
+        }
+    }
+
+    private void deleteSite(SiteTable siteTable) {
+        siteRepository.deleteByUrl(siteTable.getUrl());
+    }
+
+    private boolean isValidUrl(String url) {
+        List<Site> urlList = sites.getSites();
+        return urlList.stream().anyMatch(s -> url.startsWith(s.getUrl()));
+    }
+
+    private void initializeThreadPool() {
+        forkJoinPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+    }
+
+    private void checkRepeatInBase(Site site) {
+        if (siteRepository.findByUrl(site.getUrl()) != null) {
+            deleteSite(siteRepository.findByUrl(site.getUrl()));
+        }
     }
 }

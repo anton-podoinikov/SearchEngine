@@ -1,4 +1,4 @@
-package searchengine.parsing;
+package searchengine.services.parsing;
 
 import lombok.Data;
 

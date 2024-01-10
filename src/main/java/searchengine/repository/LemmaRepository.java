@@ -11,6 +11,9 @@ import java.util.Set;
 @Repository
 
 public interface LemmaRepository extends JpaRepository<LemmaTable, Integer> {
+
     int countBySiteId(SiteTable siteTable);
+
    List<LemmaTable> findByLemmaInAndFrequencyLessThanOrderByFrequencyAsc(Set<String> lemmas, int frequency);
+
 }

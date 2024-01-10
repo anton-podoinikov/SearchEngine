@@ -7,7 +7,7 @@ public class SearchResponse {
     private boolean result;
     private String error;
     private int count;
-    private List<Data> data; // Обновлено с searchData на data
+    private List<Data> data;
 
     public SearchResponse(boolean result, String error) {
         this.result = result;

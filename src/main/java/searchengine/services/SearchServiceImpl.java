@@ -11,7 +11,7 @@ import searchengine.model.IndexTable;
 import searchengine.model.LemmaTable;
 import searchengine.model.PageTable;
 import searchengine.model.Status;
-import searchengine.morphology.LemmaFinder;
+import searchengine.services.morphology.LemmaFinder;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
@@ -19,6 +19,7 @@ import searchengine.repository.SiteRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,6 +37,7 @@ public class SearchServiceImpl implements SearchService{
         return performSearch(query, null, offset, limit);
     }
 
+
     @Override
     public SearchResponse findByLemmaInDatabase(String query, String site, int offset, int limit) {
         if (!isIndexReady(site)) {
@@ -44,12 +46,16 @@ public class SearchServiceImpl implements SearchService{
         return performSearch(query, site, offset, limit);
     }
 
+
     private SearchResponse performSearch(String query, String site, int offset, int limit) {
         HashMap<String, Integer> lemmaList = lemmaFinder.collectLemmas(query);
+
         List<LemmaTable> filteredLemmas = filterLemmasByFrequency(lemmaList);
-        List<PageTable> relevantPages = findRelevantPages(filteredLemmas, site);
+
+        List<PageTable> relevantPages = findSequentiallyRelevantPages(filteredLemmas, site);
 
         Map<PageTable, Double> relevanceScores = calculateRelevanceScores(relevantPages, filteredLemmas);
+
         List<Map.Entry<PageTable, Double>> sortedPages = new ArrayList<>(relevanceScores.entrySet());
         sortedPages.sort(Map.Entry.comparingByValue(Comparator.reverseOrder()));
 
@@ -86,42 +92,65 @@ public class SearchServiceImpl implements SearchService{
         return response;
     }
 
-    private boolean isIndexReady(String site) {
-        return siteRepository.findByUrl(site).getStatus().equals(Status.INDEXED);
+
+    private List<PageTable> findSequentiallyRelevantPages(List<LemmaTable> filteredLemmas, String site) {
+        Map<String, Set<Integer>> pagesBySite = new HashMap<>();
+
+        // Разделение идентификаторов страниц по сайтам
+        for (LemmaTable lemma : filteredLemmas) {
+            for (IndexTable index : lemma.getIndex()) {
+                String siteUrl = index.getPage().getSiteId().getUrl().toLowerCase();
+                pagesBySite.computeIfAbsent(siteUrl, k -> new HashSet<>())
+                        .add(index.getPage().getId());
+            }
+        }
+
+        List<PageTable> finalResults = new ArrayList<>();
+
+        // Обработка каждого сайта отдельно
+        for (String currentSite : pagesBySite.keySet()) {
+            if (site == null || site.equalsIgnoreCase(currentSite)) {
+                List<LemmaTable> lemmasForSite = filterLemmasForSite(filteredLemmas, currentSite);
+                Set<Integer> relevantPageIdsForSite = findPagesForLemmasOnSite(lemmasForSite, currentSite);
+                finalResults.addAll(pageRepository.findAllById(relevantPageIdsForSite));
+            }
+        }
+
+        return finalResults;
     }
 
-    private List<LemmaTable> filterLemmasByFrequency(HashMap<String, Integer> lemmaList) {
-        Set<String> allLemmas = lemmaList.keySet();
-        int frequencyThreshold = 1000;
-        return lemmaRepository.findByLemmaInAndFrequencyLessThanOrderByFrequencyAsc(allLemmas, frequencyThreshold);
-    }
-
-    private List<PageTable> findRelevantPages(List<LemmaTable> filteredLemmas, String site) {
+    private Set<Integer> findPagesForLemmasOnSite(List<LemmaTable> lemmas, String siteUrl) {
         Set<Integer> relevantPageIds = new HashSet<>();
 
-        for (LemmaTable lemma : filteredLemmas) {
+        for (int i = 0; i < lemmas.size(); i++) {
+            LemmaTable lemma = lemmas.get(i);
             Set<Integer> currentPageIds = lemma.getIndex().stream()
+                    .filter(index -> index.getPage().getSiteId().getUrl().equalsIgnoreCase(siteUrl))
                     .map(index -> index.getPage().getId())
                     .collect(Collectors.toSet());
-            relevantPageIds.addAll(currentPageIds);
+
+            if (i == 0) {
+                relevantPageIds.addAll(currentPageIds);
+            } else {
+                relevantPageIds.retainAll(currentPageIds);
+                if (relevantPageIds.isEmpty()) {
+                    break;
+                }
+            }
         }
 
-        if (relevantPageIds.isEmpty()) {
-            log.info("No relevant pages found for the given lemmas.");
-            return Collections.emptyList();
-        }
-
-        List<PageTable> pages = pageRepository.findAllById(relevantPageIds);
-
-        if (site != null && !site.isEmpty()) {
-            pages = pages.stream()
-                    .filter(page -> page.getSiteId().getUrl().equalsIgnoreCase(site))
-                    .collect(Collectors.toList());
-        }
-        return pages;
+        return relevantPageIds;
     }
 
-    private Map<PageTable, Double> calculateRelevanceScores(List<PageTable> relevantPages, List<LemmaTable> filteredLemmas) {
+    private List<LemmaTable> filterLemmasForSite(List<LemmaTable> lemmas, String siteUrl) {
+        return lemmas.stream()
+                .filter(lemma -> lemma.getIndex().stream().anyMatch(index -> index.getPage().getSiteId().getUrl().equalsIgnoreCase(siteUrl)))
+                .collect(Collectors.toList());
+    }
+
+
+    private Map<PageTable, Double> calculateRelevanceScores(List<PageTable> relevantPages
+            ,List<LemmaTable> filteredLemmas) {
         Map<PageTable, Double> relevanceScores = new LinkedHashMap<>();
 
         for (PageTable page : relevantPages) {
@@ -135,7 +164,7 @@ public class SearchServiceImpl implements SearchService{
         }
 
         if (relevanceScores.isEmpty()) {
-            log.info("No relevant pages found or no relevancies calculated.");
+            log.info("No relevant pages found or no relevance calculated.");
             return relevanceScores;
         }
 
@@ -159,23 +188,37 @@ public class SearchServiceImpl implements SearchService{
     }
 
     private String generateSnippet(String pageContent, String query) {
-        int pos = pageContent.toLowerCase().indexOf(query.toLowerCase());
+        String textContent = Jsoup.parse(pageContent).text();
+
+        int pos = textContent.toLowerCase().indexOf(query.toLowerCase());
 
         if (pos == -1) {
-            return pageContent.substring(0, Math.min(pageContent.length(), 150)) + "...";
+            return textContent.substring(0, Math.min(textContent.length(), 150)) + "...";
         }
 
         int start = Math.max(pos - 70, 0);
-        int end = Math.min(pos + 70 + query.length(), pageContent.length());
-        String snippet = pageContent.substring(start, end) + "...";
+        int end = Math.min(pos + 70 + query.length(), textContent.length());
 
-        snippet = snippet.replaceAll(query, "<b>" + query + "</b>");
+        String snippet = textContent.substring(start, end) + "...";
+
+        snippet = snippet.replaceAll("(?i)" + Pattern.quote(query), "<b>" + query + "</b>");
 
         return snippet;
+    }
+
+    private List<LemmaTable> filterLemmasByFrequency(HashMap<String, Integer> lemmaList) {
+        Set<String> allLemmas = lemmaList.keySet();
+        int frequencyThreshold = 200;
+        return lemmaRepository.findByLemmaInAndFrequencyLessThanOrderByFrequencyAsc(allLemmas, frequencyThreshold);
+    }
+
+    private boolean isIndexReady(String site) {
+        return siteRepository.findByUrl(site).getStatus().equals(Status.INDEXED);
     }
 
     private String extractTitle(String htmlContent) {
         Document doc = Jsoup.parse(htmlContent);
         return doc.title();
     }
+
 }

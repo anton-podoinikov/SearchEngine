@@ -1,4 +1,4 @@
-package searchengine.morphology;
+package searchengine.services.morphology;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;

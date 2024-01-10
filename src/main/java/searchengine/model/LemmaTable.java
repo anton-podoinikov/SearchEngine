@@ -31,5 +31,4 @@ public class LemmaTable {
 
     @OneToMany(mappedBy = "lemma", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<IndexTable> index = new ArrayList<>();
-
 }

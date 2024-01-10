@@ -9,6 +9,7 @@ import java.util.List;
 
 @Repository
 public interface PageRepository extends JpaRepository<PageTable, Integer> {
+
     PageTable findByPath(String url);
 
     int countBySiteId(SiteTable siteTable);

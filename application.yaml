@@ -17,8 +17,8 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://nopaper.ru/
-      name: Nopaper
+#    - url: https://nopaper.ru/
+#      name: Nopaper
     - url: https://www.svetlovka.ru/
       name: Светловка
 #    - url: https://krasnodar.ru/
@@ -37,5 +37,5 @@ indexing-settings:
 #      name: volochek
 #    - url: https://4pda.to/
 #      name: 4pda
-#    - url: https://dombulgakova.ru/
-#      name: dombulgakova
+    - url: https://dombulgakova.ru/
+      name: dombulgakova
