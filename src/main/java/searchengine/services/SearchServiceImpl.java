@@ -19,6 +19,7 @@ import searchengine.repository.SiteRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -53,6 +54,9 @@ public class SearchServiceImpl implements SearchService{
         List<LemmaTable> filteredLemmas = filterLemmasByFrequency(lemmaList);
 
         List<PageTable> relevantPages = findSequentiallyRelevantPages(filteredLemmas, site);
+
+        int maxDistanceBetweenWords = 5;
+        relevantPages = filterPagesByProximity(relevantPages, query, maxDistanceBetweenWords);
 
         Map<PageTable, Double> relevanceScores = calculateRelevanceScores(relevantPages, filteredLemmas);
 
@@ -96,7 +100,6 @@ public class SearchServiceImpl implements SearchService{
     private List<PageTable> findSequentiallyRelevantPages(List<LemmaTable> filteredLemmas, String site) {
         Map<String, Set<Integer>> pagesBySite = new HashMap<>();
 
-        // Разделение идентификаторов страниц по сайтам
         for (LemmaTable lemma : filteredLemmas) {
             for (IndexTable index : lemma.getIndex()) {
                 String siteUrl = index.getPage().getSiteId().getUrl().toLowerCase();
@@ -107,7 +110,6 @@ public class SearchServiceImpl implements SearchService{
 
         List<PageTable> finalResults = new ArrayList<>();
 
-        // Обработка каждого сайта отдельно
         for (String currentSite : pagesBySite.keySet()) {
             if (site == null || site.equalsIgnoreCase(currentSite)) {
                 List<LemmaTable> lemmasForSite = filterLemmasForSite(filteredLemmas, currentSite);
@@ -188,20 +190,28 @@ public class SearchServiceImpl implements SearchService{
     }
 
     private String generateSnippet(String pageContent, String query) {
-        String textContent = Jsoup.parse(pageContent).text();
+        Document doc = Jsoup.parse(pageContent);
+        String textContent = doc.text();
 
-        int pos = textContent.toLowerCase().indexOf(query.toLowerCase());
+        String[] queryWords = query.split("\\s+");
 
-        if (pos == -1) {
-            return textContent.substring(0, Math.min(textContent.length(), 150)) + "...";
+        StringBuilder regexBuilder = new StringBuilder();
+        for (String word : queryWords) {
+            if (regexBuilder.length() > 0) regexBuilder.append("|");
+            regexBuilder.append(Pattern.quote(word));
         }
+        String regex = "(?i)(" + regexBuilder + ")";
 
-        int start = Math.max(pos - 70, 0);
-        int end = Math.min(pos + 70 + query.length(), textContent.length());
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(textContent);
+        int pos = matcher.find() ? matcher.start() : -1;
+
+        int start = Math.max(pos - 100, 0);
+        int end = Math.min(pos + 100, textContent.length());
 
         String snippet = textContent.substring(start, end) + "...";
 
-        snippet = snippet.replaceAll("(?i)" + Pattern.quote(query), "<b>" + query + "</b>");
+        snippet = snippet.replaceAll(regex, "<b>$1</b>");
 
         return snippet;
     }
@@ -221,4 +231,38 @@ public class SearchServiceImpl implements SearchService{
         return doc.title();
     }
 
+    private List<PageTable> filterPagesByProximity(List<PageTable> pages, String query, int maxDistance) {
+        List<PageTable> filteredPages = new ArrayList<>();
+        String[] queryWords = query.toLowerCase().split("\\s+");
+
+        for (PageTable page : pages) {
+            String content = Jsoup.parse(page.getContent()).text().toLowerCase();
+            if (areWordsInProximity(content, queryWords, maxDistance)) {
+                filteredPages.add(page);
+            }
+        }
+
+        return filteredPages;
+    }
+
+    private boolean areWordsInProximity(String content, String[] queryWords, int maxDistance) {
+        List<Integer> positions = new ArrayList<>();
+        for (String word : queryWords) {
+            int position = content.indexOf(word);
+            if (position == -1) {
+                return false;
+            }
+            positions.add(position);
+        }
+
+        Collections.sort(positions);
+
+        for (int i = 0; i < positions.size() - 1; i++) {
+            if (positions.get(i + 1) - positions.get(i) > maxDistance + queryWords[i].length()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

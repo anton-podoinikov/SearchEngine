@@ -20,7 +20,7 @@ indexing-settings:
 #    - url: https://nopaper.ru/
 #      name: Nopaper
     - url: https://www.svetlovka.ru/
-      name: Светловка
+      name: svetlovka
 #    - url: https://krasnodar.ru/
 #      name: krasnodar
 #    - url: https://novo-sibirsk.ru/
