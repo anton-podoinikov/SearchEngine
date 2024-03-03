@@ -17,8 +17,8 @@ spring:
 
 indexing-settings:
   sites:
-#    - url: https://nopaper.ru/
-#      name: Nopaper
+    - url: https://nopaper.ru/
+      name: nopaper
     - url: https://www.svetlovka.ru/
       name: svetlovka
 #    - url: https://krasnodar.ru/

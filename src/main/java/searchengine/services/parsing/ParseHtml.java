@@ -80,11 +80,6 @@ public class ParseHtml extends RecursiveAction {
         return new HashSet<>(links);
     }
 
-    public void clearPages() {
-        pages.clear();
-        links.clear();
-    }
-
     private void setSiteTableStatusTime() {
         siteTable.setStatusTime(LocalDateTime.now());
         siteRepository.save(siteTable);

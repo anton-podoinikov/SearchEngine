@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 @Service
 @AllArgsConstructor
 @Slf4j
-public class SearchServiceImpl implements SearchService{
+public class SearchServiceImpl implements SearchService {
     private LemmaFinder lemmaFinder;
     private final LemmaRepository lemmaRepository;
     private final PageRepository pageRepository;
@@ -152,7 +152,7 @@ public class SearchServiceImpl implements SearchService{
 
 
     private Map<PageTable, Double> calculateRelevanceScores(List<PageTable> relevantPages
-            ,List<LemmaTable> filteredLemmas) {
+            , List<LemmaTable> filteredLemmas) {
         Map<PageTable, Double> relevanceScores = new LinkedHashMap<>();
 
         for (PageTable page : relevantPages) {
