@@ -176,7 +176,7 @@ mvn spring-boot:run
 docker run --name mysql-container -e MYSQL_ROOT_PASSWORD=your_password -p 3306:3306 -d mysql:latest
 ```
 * `--name mysql-container` задает имя контейнера как mysql-container.
-* `-e MYSQL_ROOT_PASSWORD=your_password` устанавливает пароль для пользователя root. Замените your_password на ваш собственный пароль.
+* `-e MYSQL_ROOT_PASSWORD=your_password` устанавливает пароль для пользователя root. Замените my-secret-pw на ваш собственный пароль.
 * `-p 3306:3306` пробрасывает порт 3306 контейнера на локальный порт 3306.
 * `-d mysql:latest` указывает Docker использовать последнюю версию образа MySQL.
 

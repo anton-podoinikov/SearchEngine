@@ -31,13 +31,14 @@ public class SearchServiceImpl implements SearchService {
     private final LemmaRepository lemmaRepository;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final int FREQUENCY_THRESHOLD = 200;
+    private final int MAX_DISTANCE_BETWEEN_WORDS = 5;
 
 
     @Override
     public SearchResponse findByLemmaInDatabase(String query, int offset, int limit) {
         return performSearch(query, null, offset, limit);
     }
-
 
     @Override
     public SearchResponse findByLemmaInDatabase(String query, String site, int offset, int limit) {
@@ -47,7 +48,6 @@ public class SearchServiceImpl implements SearchService {
         return performSearch(query, site, offset, limit);
     }
 
-
     private SearchResponse performSearch(String query, String site, int offset, int limit) {
         HashMap<String, Integer> lemmaList = lemmaFinder.collectLemmas(query);
 
@@ -55,8 +55,7 @@ public class SearchServiceImpl implements SearchService {
 
         List<PageTable> relevantPages = findSequentiallyRelevantPages(filteredLemmas, site);
 
-        int maxDistanceBetweenWords = 5;
-        relevantPages = filterPagesByProximity(relevantPages, query, maxDistanceBetweenWords);
+        relevantPages = filterPagesByProximity(relevantPages, query, MAX_DISTANCE_BETWEEN_WORDS);
 
         Map<PageTable, Double> relevanceScores = calculateRelevanceScores(relevantPages, filteredLemmas);
 
@@ -95,7 +94,6 @@ public class SearchServiceImpl implements SearchService {
         response.setCount(totalResults);
         return response;
     }
-
 
     private List<PageTable> findSequentiallyRelevantPages(List<LemmaTable> filteredLemmas, String site) {
         Map<String, Set<Integer>> pagesBySite = new HashMap<>();
@@ -218,8 +216,7 @@ public class SearchServiceImpl implements SearchService {
 
     private List<LemmaTable> filterLemmasByFrequency(HashMap<String, Integer> lemmaList) {
         Set<String> allLemmas = lemmaList.keySet();
-        int frequencyThreshold = 200;
-        return lemmaRepository.findByLemmaInAndFrequencyLessThanOrderByFrequencyAsc(allLemmas, frequencyThreshold);
+        return lemmaRepository.findByLemmaInAndFrequencyLessThanOrderByFrequencyAsc(allLemmas, FREQUENCY_THRESHOLD);
     }
 
     private boolean isIndexReady(String site) {

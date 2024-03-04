@@ -6,8 +6,8 @@ import org.springframework.stereotype.Service;
 import searchengine.model.*;
 import searchengine.services.parsing.Link;
 import searchengine.services.parsing.ParseHtml;
-import searchengine.config.Site;
-import searchengine.config.SitesList;
+import searchengine.properties.Site;
+import searchengine.properties.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
@@ -141,8 +141,8 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private void setLemmaAndIndexPage(PageTable pageTable) {
-        Map<String, LemmaTable> lemmaTableMap = new ConcurrentHashMap<>();
-        List<IndexTable> indexTables = new CopyOnWriteArrayList<>();
+        Map<String, LemmaTable> lemmaTableMap = new HashMap<>();
+        List<IndexTable> indexTables = new ArrayList<>();
         processLemmasAndIndexes(pageTable, lemmaTableMap, indexTables);
         lemmaRepository.saveAll(lemmaTableMap.values());
         indexRepository.saveAll(indexTables);
